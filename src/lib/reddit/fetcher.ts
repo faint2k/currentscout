@@ -11,6 +11,7 @@
  */
 
 import { fetchMultipleSubreddits, fetchSubredditPosts } from "./client";
+import { fetchMultipleSubredditsRSS, fetchSubredditRSS } from "./rss";
 import { rankPosts } from "../ranking/scorer";
 import { cache } from "../cache/store";
 import { SUBREDDIT_NAMES } from "../utils/subreddits";
@@ -32,17 +33,25 @@ export async function fetchOverviewFeed(
     return { posts: hit.value, cached: true, fetchedAt: hit.timestamp, sources: subreddits };
   }
 
-  // 2. Cold-start fallback: Redis is empty (first ever deploy before cron runs)
-  //    Fetch live once, write to Redis, future requests use cache.
-  console.warn("[fetcher] Redis cold start — fetching Reddit directly (one-time)");
+  // 2. Cold-start: Redis empty — try JSON API then RSS, write result to Redis
+  console.warn("[fetcher] Redis cold start — fetching directly (one-time)");
 
   let raw = await fetchMultipleSubreddits(subreddits, { sort: "hot", limit: 25 });
-  const rising = await fetchMultipleSubreddits(subreddits.slice(0, 7), { sort: "rising", limit: 15 });
+
+  // JSON API blocked? Fall back to RSS
+  if (raw.length === 0) {
+    console.warn("[fetcher] JSON API failed — trying RSS fallback");
+    raw = await fetchMultipleSubredditsRSS(subreddits, "hot", 25);
+  }
+
+  const rising = raw.length > 0
+    ? await fetchMultipleSubredditsRSS(subreddits.slice(0, 7), "rising", 15)
+    : [];
   raw = [...raw, ...rising];
 
-  // 3. Mock fallback — Reddit API unreachable (Vercel IP blocked, no OAuth creds)
+  // 3. Mock fallback — both JSON and RSS unreachable
   if (raw.length === 0) {
-    console.warn("[fetcher] Reddit unreachable — serving mock data");
+    console.warn("[fetcher] All sources failed — serving mock data");
     return {
       posts:     rankPosts(getMockPosts()),
       cached:    false,
@@ -71,13 +80,19 @@ export async function fetchSubredditFeed(
     return { posts: hit.value, cached: true, fetchedAt: hit.timestamp };
   }
 
-  // 2. Cold-start live fetch
+  // 2. Cold-start live fetch — JSON then RSS
   console.warn(`[fetcher] Redis cold start for r/${subreddit} — fetching directly`);
 
+  const fetchSorted = async (sort: "hot" | "rising" | "top", limit: number) => {
+    const json = await fetchSubredditPosts(subreddit, { sort, limit, t: "day" });
+    if (json.length > 0) return json;
+    return fetchSubredditRSS(subreddit, sort === "top" ? "hot" : sort, limit);
+  };
+
   const [hot, risingPosts, top] = await Promise.all([
-    fetchSubredditPosts(subreddit, { sort: "hot",    limit: 25 }),
-    fetchSubredditPosts(subreddit, { sort: "rising", limit: 15 }),
-    fetchSubredditPosts(subreddit, { sort: "top",    limit: 15, t: "day" }),
+    fetchSorted("hot",    25),
+    fetchSorted("rising", 15),
+    fetchSorted("top",    15),
   ]);
 
   let raw = [...hot, ...risingPosts, ...top];

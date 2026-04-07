@@ -11,9 +11,24 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { fetchMultipleSubreddits, fetchSubredditPosts } from "../../../../lib/reddit/client";
+import { fetchMultipleSubredditsRSS, fetchSubredditRSS } from "../../../../lib/reddit/rss";
 import { rankPosts } from "../../../../lib/ranking/scorer";
 import { SUBREDDIT_NAMES } from "../../../../lib/utils/subreddits";
 import type { RedditPost } from "../../../../lib/reddit/types";
+
+/** Try JSON API first, fall back to RSS if it returns nothing */
+async function fetchWithFallback(
+  subreddits: string[],
+  sort: "hot" | "rising" = "hot",
+  limit: number
+): Promise<{ posts: RedditPost[]; source: "json" | "rss" }> {
+  const jsonPosts = await fetchMultipleSubreddits(subreddits, { sort, limit });
+  if (jsonPosts.length > 0) return { posts: jsonPosts, source: "json" };
+
+  console.warn(`[cron] JSON API returned 0 posts for ${sort} — falling back to RSS`);
+  const rssPosts = await fetchMultipleSubredditsRSS(subreddits, sort, limit);
+  return { posts: rssPosts, source: "rss" };
+}
 
 const CACHE_TTL_MS = 20 * 60 * 1000; // 20 min — slightly longer than the 15-min refresh cycle
 
@@ -60,13 +75,13 @@ export async function GET(req: NextRequest) {
     // ── 1. Overview feed (all subreddits combined) ────────────────────────
     console.log("[cron] Fetching overview feed…");
 
-    let raw: RedditPost[] = await fetchMultipleSubreddits(SUBREDDIT_NAMES, {
-      sort: "hot", limit: 25,
-    });
+    const { posts: hotPosts, source: hotSource } = await fetchWithFallback(SUBREDDIT_NAMES, "hot", 25);
+    console.log(`[cron] Hot feed: ${hotPosts.length} posts via ${hotSource}`);
 
-    // Also pull rising from tier-1 subs to catch early movers
     const tier1 = SUBREDDIT_NAMES.slice(0, 7);
-    const rising = await fetchMultipleSubreddits(tier1, { sort: "rising", limit: 15 });
+    const { posts: rising } = await fetchWithFallback(tier1, "rising", 15);
+
+    let raw: RedditPost[] = [...hotPosts, ...rising];
     raw = [...raw, ...rising];
 
     // Deduplicate
@@ -94,10 +109,17 @@ export async function GET(req: NextRequest) {
       await Promise.all(
         batch.map(async (sub) => {
           try {
+            // Try JSON API, fall back to RSS per-sort
+            const fetchSorted = async (sort: "hot" | "rising" | "top", limit: number) => {
+              const json = await fetchSubredditPosts(sub, { sort, limit, t: "day" });
+              if (json.length > 0) return json;
+              return fetchSubredditRSS(sub, sort === "top" ? "hot" : sort, limit);
+            };
+
             const [hot, risingPosts, top] = await Promise.all([
-              fetchSubredditPosts(sub, { sort: "hot",    limit: 25 }),
-              fetchSubredditPosts(sub, { sort: "rising", limit: 15 }),
-              fetchSubredditPosts(sub, { sort: "top",    limit: 15, t: "day" }),
+              fetchSorted("hot",    25),
+              fetchSorted("rising", 15),
+              fetchSorted("top",    15),
             ]);
 
             let subRaw = [...hot, ...risingPosts, ...top];
