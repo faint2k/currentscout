@@ -1,13 +1,13 @@
 /**
  * store.ts — Two-tier cache: Upstash Redis (global) with in-memory fallback
  *
- * When UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN are set (production),
- * all Vercel function instances share the same Redis cache — Reddit is only
- * fetched once per TTL window regardless of how many concurrent users exist.
+ * Uses the @upstash/redis SDK which handles serialisation and the REST API
+ * format correctly — no raw fetch calls needed.
  *
- * Without those env vars (local dev), falls back to in-memory cache so
- * development works with zero setup.
+ * Without UPSTASH_* env vars (local dev) falls back to in-memory cache.
  */
+
+import { Redis } from "@upstash/redis";
 
 interface CacheEntry<T> {
   value:     T;
@@ -15,7 +15,16 @@ interface CacheEntry<T> {
   expiresAt: number;
 }
 
-// ─── In-memory fallback (local dev / single-instance) ─────────────────────────
+// ─── Upstash client (lazy singleton) ─────────────────────────────────────────
+
+function getRedis(): Redis | null {
+  const url   = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) return null;
+  return new Redis({ url, token });
+}
+
+// ─── In-memory fallback (local dev) ──────────────────────────────────────────
 
 class InMemoryCache {
   private store = new Map<string, CacheEntry<unknown>>();
@@ -36,72 +45,53 @@ class InMemoryCache {
 
 const memCache = new InMemoryCache();
 
-// ─── Upstash Redis (production — shared across all Vercel instances) ──────────
-
-async function redisGet<T>(key: string): Promise<CacheEntry<T> | null> {
-  try {
-    const url   = process.env.UPSTASH_REDIS_REST_URL;
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-    if (!url || !token) return null;
-
-    const res = await fetch(`${url}/get/${encodeURIComponent(key)}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: "no-store",
-    });
-
-    if (!res.ok) return null;
-    const data = await res.json() as { result: string | null };
-    if (!data.result) return null;
-
-    const entry = JSON.parse(data.result) as CacheEntry<T>;
-    if (Date.now() > entry.expiresAt) return null;
-    return entry;
-  } catch {
-    return null;
-  }
-}
-
-async function redisSet<T>(key: string, value: T, ttlMs: number): Promise<void> {
-  try {
-    const url   = process.env.UPSTASH_REDIS_REST_URL;
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-    if (!url || !token) return;
-
-    const entry: CacheEntry<T> = { value, timestamp: Date.now(), expiresAt: Date.now() + ttlMs };
-    const ttlSeconds = Math.ceil(ttlMs / 1000);
-
-    await fetch(`${url}/set/${encodeURIComponent(key)}`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ value: JSON.stringify(entry), ex: ttlSeconds }),
-      cache: "no-store",
-    });
-  } catch {
-    // Redis write failure is non-fatal — fall through to live fetch
-  }
-}
-
 // ─── Unified cache interface ──────────────────────────────────────────────────
 
 export const cache = {
   async get<T>(key: string): Promise<CacheEntry<T> | null> {
-    // Try Redis first (production), fall back to in-memory (dev)
-    const redisHit = await redisGet<T>(key);
-    if (redisHit) return redisHit;
+    // 1. Try Redis (production)
+    try {
+      const redis = getRedis();
+      if (redis) {
+        const entry = await redis.get<CacheEntry<T>>(key);
+        if (entry) {
+          if (Date.now() > entry.expiresAt) return null;
+          return entry;
+        }
+      }
+    } catch (err) {
+      console.warn("[cache] Redis get error:", err);
+    }
+
+    // 2. In-memory fallback (dev / Redis unavailable)
     return memCache.get<T>(key);
   },
 
   async set<T>(key: string, value: T, ttlMs: number): Promise<void> {
-    // Write to both so in-memory acts as L1 on warm instances
+    const entry: CacheEntry<T> = {
+      value,
+      timestamp: Date.now(),
+      expiresAt: Date.now() + ttlMs,
+    };
+    const ttlSeconds = Math.ceil(ttlMs / 1000);
+
+    // Write to in-memory first (always, acts as L1 on warm instances)
     memCache.set(key, value, ttlMs);
-    await redisSet(key, value, ttlMs);
+
+    // Write to Redis (production)
+    try {
+      const redis = getRedis();
+      if (redis) {
+        await redis.set(key, entry, { ex: ttlSeconds });
+      }
+    } catch (err) {
+      console.warn("[cache] Redis set error:", err);
+      // Non-fatal — in-memory cache still works for this instance
+    }
   },
 
   invalidate(key: string): void {
     memCache.invalidate(key);
-    // Redis TTL handles expiry automatically — no explicit delete needed
+    // Redis TTL handles expiry — no explicit delete needed
   },
 };
