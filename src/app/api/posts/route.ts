@@ -61,13 +61,24 @@ export async function GET(req: NextRequest) {
     const sorted  = applySort(filtered, sort);
     const sliced  = sorted.slice(0, limit);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       posts:     sliced,
       total:     filtered.length,
       fetchedAt,
       cached,
       sources,
     });
+
+    // Tell Vercel's CDN edge to cache this response for 5 minutes,
+    // serve stale for up to 15 minutes while revalidating in background.
+    // This means thousands of concurrent users all get the same cached
+    // response with zero extra Reddit API calls.
+    response.headers.set(
+      "Cache-Control",
+      "public, s-maxage=300, stale-while-revalidate=900"
+    );
+
+    return response;
   } catch (err) {
     console.error("[api/posts] Error:", err);
     return NextResponse.json({ error: "Failed to fetch posts" }, { status: 500 });

@@ -1,64 +1,106 @@
 /**
  * client.ts — Free Reddit data ingestion
  *
- * Strategy: Reddit's public JSON API requires no authentication for read-only
- * access to public subreddits.  Each subreddit exposes:
- *   https://www.reddit.com/r/{sub}/{sort}.json?limit=25&raw_json=1
+ * Two access modes (automatic fallback):
  *
- * Rate limits (unauthenticated):
- *   ~60 requests / minute.  We batch fetches and cache aggressively (15 min TTL).
+ * 1. OAuth (preferred) — uses a free Reddit "script" app to get a bearer token.
+ *    Set REDDIT_CLIENT_ID + REDDIT_CLIENT_SECRET in env vars.
+ *    Gives 100 req/min and works reliably from Vercel/cloud IPs.
  *
- * Fallback: MOCK_DATA in data/mock.ts is returned when the Reddit API is
- * unavailable (network error, rate-limited, or during SSR/testing).
+ * 2. Public JSON (fallback) — no auth needed, but Reddit blocks many cloud IPs.
+ *    Works locally; may 403 on Vercel without OAuth credentials.
+ *
+ * Fallback chain: OAuth → Public JSON → Mock data (in fetcher.ts)
  */
 
 import type { RedditPost, RedditListing } from "./types";
 
-const BASE_URL = "https://www.reddit.com";
-
-/** Browser-like UA avoids most 429s on the public API */
-const USER_AGENT =
-  "Mozilla/5.0 (compatible; AIHub/1.0; +https://github.com/aihub)";
+const PUBLIC_BASE  = "https://www.reddit.com";
+const OAUTH_BASE   = "https://oauth.reddit.com";
+const TOKEN_URL    = "https://www.reddit.com/api/v1/access_token";
+const APP_USER_AGENT = "web:aihub:v1.0 (by /u/aihub_bot)";
 
 export type RedditSort = "hot" | "new" | "rising" | "top";
 
 export interface FetchSubredditOptions {
-  sort?:   RedditSort;
-  limit?:  number;
-  after?:  string;
-  t?:      "hour" | "day" | "week" | "month" | "year" | "all"; // for top
+  sort?:  RedditSort;
+  limit?: number;
+  after?: string;
+  t?:     "hour" | "day" | "week" | "month" | "year" | "all";
 }
 
-/**
- * Fetch posts from a single subreddit using Reddit's free JSON API.
- * Returns an empty array on any error so callers can continue gracefully.
- */
+// ─── OAuth token cache (module-level, survives warm function invocations) ─────
+
+let cachedToken: string | null = null;
+let tokenExpiresAt = 0;
+
+async function getOAuthToken(): Promise<string | null> {
+  const clientId     = process.env.REDDIT_CLIENT_ID;
+  const clientSecret = process.env.REDDIT_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return null;
+
+  // Return cached token if still valid (with 60s buffer)
+  if (cachedToken && Date.now() < tokenExpiresAt - 60_000) return cachedToken;
+
+  try {
+    const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+    const res = await fetch(TOKEN_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${credentials}`,
+        "User-Agent":  APP_USER_AGENT,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: "grant_type=client_credentials",
+    });
+
+    if (!res.ok) {
+      console.warn("[reddit] OAuth token request failed:", res.status);
+      return null;
+    }
+
+    const data = await res.json() as { access_token: string; expires_in: number };
+    cachedToken    = data.access_token;
+    tokenExpiresAt = Date.now() + data.expires_in * 1000;
+    return cachedToken;
+  } catch (err) {
+    console.warn("[reddit] OAuth token error:", err);
+    return null;
+  }
+}
+
+// ─── Core fetch ───────────────────────────────────────────────────────────────
+
 export async function fetchSubredditPosts(
   subreddit: string,
   options: FetchSubredditOptions = {}
 ): Promise<RedditPost[]> {
   const { sort = "hot", limit = 25, after, t = "day" } = options;
 
-  const params = new URLSearchParams({
-    limit:    String(limit),
-    raw_json: "1",
-  });
+  const params = new URLSearchParams({ limit: String(limit), raw_json: "1" });
   if (after) params.set("after", after);
   if (sort === "top") params.set("t", t);
 
-  const url = `${BASE_URL}/r/${subreddit}/${sort}.json?${params}`;
+  // Try OAuth first (works from cloud IPs), fall back to public endpoint
+  const token = await getOAuthToken();
+  const baseUrl = token ? OAUTH_BASE : PUBLIC_BASE;
+  const url     = `${baseUrl}/r/${subreddit}/${sort}.json?${params}`;
+
+  const headers: Record<string, string> = {
+    "User-Agent": APP_USER_AGENT,
+    Accept:       "application/json",
+  };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
 
   try {
     const res = await fetch(url, {
-      headers: {
-        "User-Agent": USER_AGENT,
-        Accept:       "application/json",
-      },
-      next: { revalidate: 900 }, // Next.js ISR: cache 15 minutes
+      headers,
+      // Next.js 16: use cache option instead of next.revalidate inside fetch
+      cache: "no-store",
     });
 
     if (!res.ok) {
-      console.warn(`[reddit] ${subreddit} returned ${res.status}`);
+      console.warn(`[reddit] r/${subreddit} ${sort} → HTTP ${res.status}`);
       return [];
     }
 
@@ -72,16 +114,10 @@ export async function fetchSubredditPosts(
   }
 }
 
-/**
- * Fetch from multiple subreddits concurrently, with a small stagger to be
- * polite to the free API.  Each subreddit may contribute posts from "hot"
- * and "rising" so fresh + trending content is both captured.
- */
 export async function fetchMultipleSubreddits(
   subreddits: string[],
   options: FetchSubredditOptions = {}
 ): Promise<RedditPost[]> {
-  // Stagger requests in batches of 5 to avoid burst rate-limiting
   const BATCH_SIZE = 5;
   const all: RedditPost[] = [];
 
@@ -93,14 +129,11 @@ export async function fetchMultipleSubreddits(
     );
 
     for (const result of results) {
-      if (result.status === "fulfilled") {
-        all.push(...result.value);
-      }
+      if (result.status === "fulfilled") all.push(...result.value);
     }
 
-    // Small delay between batches to be rate-limit friendly
     if (i + BATCH_SIZE < subreddits.length) {
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((r) => setTimeout(r, 150));
     }
   }
 

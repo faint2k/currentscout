@@ -33,8 +33,8 @@ export function PostModal({ post, onClose }: PostModalProps) {
         onClick={onClose}
       />
 
-      {/* Panel */}
-      <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-xl bg-zinc-900 border-l border-zinc-700/60 overflow-y-auto shadow-2xl">
+      {/* Panel — z-[51] sits above the z-50 backdrop so links are always clickable */}
+      <div className="fixed right-0 top-0 bottom-0 z-[51] w-full max-w-xl bg-zinc-900 border-l border-zinc-700/60 overflow-y-auto shadow-2xl">
         {/* Header */}
         <div className="sticky top-0 bg-zinc-900/95 border-b border-zinc-800 px-5 py-3 flex items-start gap-3">
           <div className="flex-1 min-w-0">
