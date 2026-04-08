@@ -9,7 +9,7 @@
  *   - Subreddit tier weight as a final multiplier
  *
  * Formula:
- *   rawScore = 0.35*momentum + 0.25*recency + 0.30*engagement + 0.10*quality
+ *   rawScore = 0.30*momentum + 0.20*recency + 0.40*engagement + 0.10*quality
  *   weightedScore = rawScore * subredditWeight * penaltyFactor
  */
 
@@ -17,6 +17,7 @@ import {
   SCORE_WEIGHTS,
   RECENCY_WINDOW_HOURS,
   MOMENTUM_NORMALISER,
+  MOMENTUM_MATURITY_HOURS,
   ENGAGEMENT_NORMALISER,
   ENGAGEMENT_WEIGHTS,
   FLUFF_KEYWORDS,
@@ -36,11 +37,16 @@ import type { RankedPost, RedditPost } from "../reddit/types";
 /**
  * Momentum score (0–100)
  * Measures how fast a post is accumulating upvotes relative to its age.
- * High velocity early in a post's life = strong trend signal.
+ * Dampened for posts under MOMENTUM_MATURITY_HOURS — early velocity is noise.
+ * A 20-min post with 80 upvotes looks like 240 upvotes/hour but hasn't
+ * proven itself. Full momentum credit only after the post has had time to settle.
  */
 function computeMomentum(score: number, hoursOld: number): number {
-  const velocity = score / Math.max(hoursOld, 0.25);
-  return Math.min(100, (Math.log1p(velocity) / Math.log1p(MOMENTUM_NORMALISER)) * 100);
+  const velocity    = score / Math.max(hoursOld, 0.25);
+  const rawMomentum = Math.min(100, (Math.log1p(velocity) / Math.log1p(MOMENTUM_NORMALISER)) * 100);
+  // Ramp from 0→1 over the maturity window — young posts earn momentum gradually
+  const maturity    = Math.min(1, hoursOld / MOMENTUM_MATURITY_HOURS);
+  return rawMomentum * maturity;
 }
 
 /**

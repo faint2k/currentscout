@@ -6,12 +6,13 @@
 
 /** Component weights — must sum to 1.0 */
 export const SCORE_WEIGHTS = {
-  /** Velocity: log-normalised upvotes-per-hour. Trend signal comes first. */
-  momentum:   0.35,
+  /** Velocity: log-normalised upvotes-per-hour. Dampened for posts < 2h old. */
+  momentum:   0.30,
   /** Freshness: linear decay over RECENCY_WINDOW_HOURS */
-  recency:    0.25,
-  /** Depth: logarithmic combo of score + comments + upvote ratio */
-  engagement: 0.30,
+  recency:    0.20,
+  /** Depth: logarithmic combo of score + comments + upvote ratio.
+   *  Weighted highest — proven engagement beats raw freshness on Best sort. */
+  engagement: 0.40,
   /** Quality: heuristic content-quality signals */
   quality:    0.10,
 } as const;
@@ -22,6 +23,11 @@ export const RECENCY_WINDOW_HOURS = 168;
 /** Momentum normaliser — the "max expected" velocity in upvotes/hour.
  *  Posts approaching this value score ~100 on momentum. */
 export const MOMENTUM_NORMALISER = 2_000;
+
+/** Posts under this age have dampened momentum.
+ *  Early velocity is noise — a 20-min post with 80 upvotes looks like
+ *  240 upvotes/hour but hasn't proven itself yet. Full momentum at 2h+. */
+export const MOMENTUM_MATURITY_HOURS = 2;
 
 /** Engagement normaliser — log1p of a "perfect" engagement signal. */
 export const ENGAGEMENT_NORMALISER =
