@@ -7,14 +7,13 @@
 /** Component weights — must sum to 1.0 */
 export const SCORE_WEIGHTS = {
   /** Velocity: log-normalised upvotes-per-hour. Dampened for posts < 2h old. */
-  momentum:   0.30,
+  momentum:   0.28,
   /** Freshness: linear decay over RECENCY_WINDOW_HOURS */
-  recency:    0.20,
-  /** Depth: logarithmic combo of score + comments + upvote ratio.
-   *  Weighted highest — proven engagement beats raw freshness on Best sort. */
-  engagement: 0.40,
-  /** Quality: heuristic content-quality signals */
-  quality:    0.10,
+  recency:    0.18,
+  /** Depth: logarithmic combo of score + comments + upvote ratio. */
+  engagement: 0.38,
+  /** Quality: title keywords, technical depth — our most reliable RSS signal. */
+  quality:    0.16,
 } as const;
 
 /** Post older than this contributes 0 recency score (7 days) */

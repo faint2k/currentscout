@@ -14,6 +14,7 @@
  */
 
 import type { RedditPost } from "./types";
+import { getSubredditConfig } from "../utils/subreddits";
 
 const RSS_BASE    = "https://www.reddit.com/r";
 const USER_AGENT  = "web:aihub:v1.0 (by /u/aihub_bot)";
@@ -54,15 +55,20 @@ function parseExternalUrl(contentHtml: string, permalink: string): string {
   return links[0]?.[1] ?? `https://www.reddit.com${permalink}`;
 }
 
-/** Estimate score from feed position (Reddit's hot feed orders by score+age) */
-function estimatedScore(position: number): number {
-  // Exponential decay: position 0 ≈ 800, position 24 ≈ 20
-  return Math.max(10, Math.round(800 * Math.exp(-position * 0.14)));
+/**
+ * Estimate score from feed position scaled by subreddit size.
+ * A #1 post in ChatGPT (11M members) should outscore #1 in vllm (2K members).
+ * Normalised around 100K subscribers as a baseline.
+ */
+function estimatedScore(position: number, subscribers: number): number {
+  const baseScore  = Math.max(10, Math.round(800 * Math.exp(-position * 0.14)));
+  const subScale   = Math.log1p(Math.max(subscribers, 1_000)) / Math.log1p(100_000);
+  return Math.round(baseScore * subScale);
 }
 
 // ─── Entry parser ─────────────────────────────────────────────────────────────
 
-function parseEntry(entryXml: string, subreddit: string, position: number): RedditPost | null {
+function parseEntry(entryXml: string, subreddit: string, position: number, subscribers: number): RedditPost | null {
   try {
     // Title
     const rawTitle = extractTag(entryXml, "title");
@@ -118,7 +124,7 @@ function parseEntry(entryXml: string, subreddit: string, position: number): Redd
       author,
       subreddit,
       subreddit_id:         "",
-      score:                estimatedScore(position),
+      score:                estimatedScore(position, subscribers),
       upvote_ratio:         0.90,       // RSS doesn't expose this — use safe default
       num_comments:         numComments,
       created_utc:          createdUtc,
@@ -164,11 +170,12 @@ export async function fetchSubredditRSS(
     const xml = await res.text();
 
     // Split on <entry> tags (Reddit uses Atom format)
-    const entries = xml.split(/<entry>/i).slice(1);
+    const entries     = xml.split(/<entry>/i).slice(1);
+    const subscribers = getSubredditConfig(subreddit)?.subscribers ?? 10_000;
 
     const posts: RedditPost[] = [];
     for (let i = 0; i < entries.length; i++) {
-      const post = parseEntry(entries[i], subreddit, i);
+      const post = parseEntry(entries[i], subreddit, i, subscribers);
       if (post) posts.push(post);
     }
 

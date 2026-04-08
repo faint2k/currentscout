@@ -4,7 +4,8 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebSearch",
-      "WebFetch(domain:currentscout.com)"
+      "WebFetch(domain:currentscout.com)",
+      "WebFetch(domain:www.reddit.com)"
     ]
   }
 }
