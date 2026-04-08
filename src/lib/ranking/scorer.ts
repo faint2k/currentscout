@@ -193,17 +193,16 @@ export function rankPosts(posts: RedditPost[]): RankedPost[] {
   // Normalise final scores across the batch:
   // best post = 100, everything else scales proportionally.
   // This ensures score spread reflects real relative differences.
-  const maxRaw = Math.max(...ranked.map((p) => p.scores.final), 1);
+  const sorted = ranked.sort((a, b) => b.scores.final - a.scores.final);
+  const n      = sorted.length;
 
-  return ranked
-    .map((p) => ({
-      ...p,
-      scores: {
-        ...p.scores,
-        final: Math.round((p.scores.final / maxRaw) * 100),
-      },
-    }))
-    .sort((a, b) => b.scores.final - a.scores.final);
+  return sorted.map((p, i) => ({
+    ...p,
+    scores: {
+      ...p.scores,
+      final: Math.round(100 - (i / Math.max(n - 1, 1)) * 99),
+    },
+  }));
 }
 
 /**
@@ -317,13 +316,17 @@ export function rankPostsFallback(posts: RedditPost[]): RankedPost[] {
     } as RankedPost;
   });
 
-  // Batch normalise
-  const maxRaw = Math.max(...scored.map((p) => p.scores.final), 1);
+  // Sort by raw score first, then assign display scores by rank.
+  // Batch normalisation causes clustering — top posts all end up at 98-100
+  // because their raw scores are similar. Rank-based display is honest.
+  const sorted = scored.sort((a, b) => b.scores.final - a.scores.final);
+  const n      = sorted.length;
 
-  return scored
-    .map((p) => ({
-      ...p,
-      scores: { ...p.scores, final: Math.round((p.scores.final / maxRaw) * 100) },
-    }))
-    .sort((a, b) => b.scores.final - a.scores.final);
+  return sorted.map((p, i) => ({
+    ...p,
+    scores: {
+      ...p.scores,
+      final: Math.round(100 - (i / Math.max(n - 1, 1)) * 99),
+    },
+  }));
 }
