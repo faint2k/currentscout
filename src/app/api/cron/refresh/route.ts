@@ -2,9 +2,8 @@
  * GET /api/cron/refresh
  *
  * Called by GitHub Actions every 15 minutes.
- * Fetches all subreddits from Reddit, ranks posts, and writes results
- * to Upstash Redis. User-facing API routes then read from Redis only —
- * Reddit is never touched by user requests.
+ * Fetches all subreddits from Reddit (JSON → RSS fallback), ranks posts,
+ * and writes results to Upstash Redis via the shared cache module.
  *
  * Protected by CRON_SECRET env var (Bearer token).
  */
@@ -13,52 +12,37 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchMultipleSubreddits, fetchSubredditPosts } from "../../../../lib/reddit/client";
 import { fetchMultipleSubredditsRSS, fetchSubredditRSS } from "../../../../lib/reddit/rss";
 import { rankPosts } from "../../../../lib/ranking/scorer";
+import { cache } from "../../../../lib/cache/store";
 import { SUBREDDIT_NAMES } from "../../../../lib/utils/subreddits";
 import type { RedditPost } from "../../../../lib/reddit/types";
+
+const CACHE_TTL_MS  = 20 * 60 * 1000;
+const OVERVIEW_KEY  = `overview:${[...SUBREDDIT_NAMES].sort().join(",")}`;
+const SUB_KEY       = (name: string) => `sub:${name.toLowerCase()}`;
 
 /** Try JSON API first, fall back to RSS if it returns nothing */
 async function fetchWithFallback(
   subreddits: string[],
-  sort: "hot" | "rising" = "hot",
+  sort: "hot" | "rising",
   limit: number
-): Promise<{ posts: RedditPost[]; source: "json" | "rss" }> {
+): Promise<{ posts: RedditPost[]; source: "json" | "rss" | "empty" }> {
   const jsonPosts = await fetchMultipleSubreddits(subreddits, { sort, limit });
   if (jsonPosts.length > 0) return { posts: jsonPosts, source: "json" };
 
-  console.warn(`[cron] JSON API returned 0 posts for ${sort} — falling back to RSS`);
+  console.warn(`[cron] JSON API returned 0 for ${sort} — trying RSS`);
   const rssPosts = await fetchMultipleSubredditsRSS(subreddits, sort, limit);
-  return { posts: rssPosts, source: "rss" };
+  if (rssPosts.length > 0) return { posts: rssPosts, source: "rss" };
+
+  return { posts: [], source: "empty" };
 }
 
-const CACHE_TTL_MS = 20 * 60 * 1000; // 20 min — slightly longer than the 15-min refresh cycle
-
-async function writeToRedis(key: string, value: unknown, ttlMs: number): Promise<boolean> {
-  const url   = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url || !token) {
-    console.warn("[cron] No Upstash credentials — skipping Redis write");
-    return false;
-  }
-
-  const ttlSeconds = Math.ceil(ttlMs / 1000);
-  const res = await fetch(`${url}/set/${encodeURIComponent(key)}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      value: JSON.stringify({ value, timestamp: Date.now(), expiresAt: Date.now() + ttlMs }),
-      ex: ttlSeconds,
-    }),
-    cache: "no-store",
-  });
-
-  return res.ok;
+function dedup(posts: RedditPost[]): RedditPost[] {
+  const seen = new Set<string>();
+  return posts.filter((p) => { if (seen.has(p.id)) return false; seen.add(p.id); return true; });
 }
 
 export async function GET(req: NextRequest) {
-  // ── Auth check ───────────────────────────────────────────────────────────
+  // ── Auth ──────────────────────────────────────────────────────────────────
   const secret = process.env.CRON_SECRET;
   if (secret) {
     const auth = req.headers.get("authorization") ?? "";
@@ -72,36 +56,29 @@ export async function GET(req: NextRequest) {
   let totalPosts = 0;
 
   try {
-    // ── 1. Overview feed (all subreddits combined) ────────────────────────
+    // ── 1. Overview feed ─────────────────────────────────────────────────────
     console.log("[cron] Fetching overview feed…");
 
-    const { posts: hotPosts, source: hotSource } = await fetchWithFallback(SUBREDDIT_NAMES, "hot", 25);
-    console.log(`[cron] Hot feed: ${hotPosts.length} posts via ${hotSource}`);
+    const { posts: hot,    source: hotSrc    } = await fetchWithFallback(SUBREDDIT_NAMES, "hot",    25);
+    const { posts: rising, source: risingSrc } = await fetchWithFallback(SUBREDDIT_NAMES.slice(0, 7), "rising", 15);
 
-    const tier1 = SUBREDDIT_NAMES.slice(0, 7);
-    const { posts: rising } = await fetchWithFallback(tier1, "rising", 15);
+    console.log(`[cron] hot=${hot.length}(${hotSrc}) rising=${rising.length}(${risingSrc})`);
 
-    let raw: RedditPost[] = [...hotPosts, ...rising];
-    raw = [...raw, ...rising];
-
-    // Deduplicate
-    const seen = new Set<string>();
-    raw = raw.filter((p) => { if (seen.has(p.id)) return false; seen.add(p.id); return true; });
+    const raw = dedup([...hot, ...rising]);
 
     if (raw.length > 0) {
       const ranked = rankPosts(raw);
-      const overviewKey = `overview:${[...SUBREDDIT_NAMES].sort().join(",")}`;
-      await writeToRedis(overviewKey, ranked, CACHE_TTL_MS);
+      await cache.set(OVERVIEW_KEY, ranked, CACHE_TTL_MS); // ← uses @upstash/redis SDK
       results["overview"] = ranked.length;
       totalPosts += ranked.length;
-      console.log(`[cron] Overview: ${ranked.length} ranked posts written to Redis`);
+      console.log(`[cron] Overview: ${ranked.length} posts written to Redis`);
+    } else {
+      console.warn("[cron] Overview: 0 posts fetched — Redis not updated");
     }
 
-    // ── 2. Per-subreddit feeds ────────────────────────────────────────────
-    // Refresh the top-tier subreddits individually so their dedicated pages
-    // also show live data. Do them in small batches to stay within rate limits.
+    // ── 2. Per-subreddit feeds (top 15) ──────────────────────────────────────
     const PRIORITY_SUBS = SUBREDDIT_NAMES.slice(0, 15);
-    const BATCH_SIZE = 3;
+    const BATCH_SIZE    = 3;
 
     for (let i = 0; i < PRIORITY_SUBS.length; i += BATCH_SIZE) {
       const batch = PRIORITY_SUBS.slice(i, i + BATCH_SIZE);
@@ -109,53 +86,45 @@ export async function GET(req: NextRequest) {
       await Promise.all(
         batch.map(async (sub) => {
           try {
-            // Try JSON API, fall back to RSS per-sort
             const fetchSorted = async (sort: "hot" | "rising" | "top", limit: number) => {
               const json = await fetchSubredditPosts(sub, { sort, limit, t: "day" });
               if (json.length > 0) return json;
               return fetchSubredditRSS(sub, sort === "top" ? "hot" : sort, limit);
             };
 
-            const [hot, risingPosts, top] = await Promise.all([
+            const [hotSub, risingSub, topSub] = await Promise.all([
               fetchSorted("hot",    25),
               fetchSorted("rising", 15),
               fetchSorted("top",    15),
             ]);
 
-            let subRaw = [...hot, ...risingPosts, ...top];
-            const subSeen = new Set<string>();
-            subRaw = subRaw.filter((p) => {
-              if (subSeen.has(p.id)) return false;
-              subSeen.add(p.id);
-              return true;
-            });
+            const subRaw = dedup([...hotSub, ...risingSub, ...topSub]);
 
             if (subRaw.length > 0) {
               const ranked = rankPosts(subRaw);
-              await writeToRedis(`sub:${sub.toLowerCase()}`, ranked, CACHE_TTL_MS);
-              results[sub] = ranked.length;
-              totalPosts += ranked.length;
+              await cache.set(SUB_KEY(sub), ranked, CACHE_TTL_MS); // ← SDK
+              results[sub]  = ranked.length;
+              totalPosts   += ranked.length;
             }
           } catch (err) {
-            console.warn(`[cron] Failed to refresh r/${sub}:`, err);
+            console.warn(`[cron] r/${sub} failed:`, err);
           }
         })
       );
 
-      // Pause between batches
       if (i + BATCH_SIZE < PRIORITY_SUBS.length) {
         await new Promise((r) => setTimeout(r, 500));
       }
     }
 
     const elapsed = Date.now() - startedAt;
-    console.log(`[cron] Done in ${elapsed}ms — ${totalPosts} total posts across ${Object.keys(results).length} feeds`);
+    console.log(`[cron] Done in ${elapsed}ms — ${totalPosts} posts across ${Object.keys(results).length} feeds`);
 
     return NextResponse.json({
-      ok:          true,
-      elapsed_ms:  elapsed,
-      total_posts: totalPosts,
-      feeds:       results,
+      ok:           true,
+      elapsed_ms:   elapsed,
+      total_posts:  totalPosts,
+      feeds:        results,
       refreshed_at: new Date().toISOString(),
     });
 
