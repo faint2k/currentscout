@@ -31,10 +31,10 @@ export function TopBar() {
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 shrink-0">
           <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm">
-            A
+            C
           </div>
           <span className="font-bold text-white text-sm tracking-tight hidden sm:block">
-            The AI Hub
+            CurrentScout
           </span>
         </Link>
 

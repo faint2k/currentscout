@@ -18,9 +18,9 @@ export function StatsPanel() {
       <div className="bg-zinc-900 border border-zinc-800/70 rounded-lg p-3">
         <div className="flex items-center gap-2 mb-2">
           <div className="w-6 h-6 rounded-md bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white font-bold text-xs shrink-0">
-            A
+            C
           </div>
-          <h2 className="text-xs font-semibold text-zinc-200">The AI Hub</h2>
+          <h2 className="text-xs font-semibold text-zinc-200">CurrentScout</h2>
         </div>
         <p className="text-[11px] text-zinc-500 leading-relaxed">
           A trending-first Reddit dashboard for the AI community. Posts ranked by momentum, engagement,
