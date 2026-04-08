@@ -82,6 +82,8 @@ export function getSubredditConfig(name: string): SubredditConfig | undefined {
 }
 
 export function getSubredditWeight(name: string): number {
+  // HN is a high-signal external source — real scores, real comments, curated community.
+  if (name.toLowerCase() === "hackernews") return 1.40;
   return getSubredditConfig(name)?.weight ?? 1.0;
 }
 

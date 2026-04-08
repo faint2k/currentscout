@@ -44,6 +44,7 @@ export interface RedditPost {
   spoiler:          boolean;
   locked:           boolean;
   post_hint?:       string;
+  source?:          "reddit" | "hn"; // populated by HN fetcher; undefined = reddit
 }
 
 // ─── Ranked post (after scorer enrichment) ───────────────────────────────────

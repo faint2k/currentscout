@@ -12,9 +12,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchMultipleSubreddits, fetchSubredditPosts } from "../../../../lib/reddit/client";
 import { fetchMultipleSubredditsRSS, fetchSubredditRSS } from "../../../../lib/reddit/rss";
 import { rankPosts, rankPostsFallback } from "../../../../lib/ranking/scorer";
+import { fetchHNPosts } from "../../../../lib/hackernews/fetcher";
 import { cache } from "../../../../lib/cache/store";
 import { SUBREDDIT_NAMES } from "../../../../lib/utils/subreddits";
-import type { RedditPost } from "../../../../lib/reddit/types";
+import type { RankedPost, RedditPost } from "../../../../lib/reddit/types";
 
 const CACHE_TTL_MS  = 20 * 60 * 1000;
 const OVERVIEW_KEY  = `overview:${[...SUBREDDIT_NAMES].sort().join(",")}`;
@@ -59,21 +60,43 @@ export async function GET(req: NextRequest) {
     // ── 1. Overview feed ─────────────────────────────────────────────────────
     console.log("[cron] Fetching overview feed…");
 
-    const { posts: hot,    source: hotSrc    } = await fetchWithFallback(SUBREDDIT_NAMES, "hot",    25);
-    const { posts: rising, source: risingSrc } = await fetchWithFallback(SUBREDDIT_NAMES.slice(0, 7), "rising", 15);
+    // Fetch Reddit + HN in parallel
+    const [
+      { posts: hot,    source: hotSrc    },
+      { posts: rising, source: risingSrc },
+      hnRaw,
+    ] = await Promise.all([
+      fetchWithFallback(SUBREDDIT_NAMES, "hot",    25),
+      fetchWithFallback(SUBREDDIT_NAMES.slice(0, 7), "rising", 15),
+      fetchHNPosts(),
+    ]);
 
-    console.log(`[cron] hot=${hot.length}(${hotSrc}) rising=${rising.length}(${risingSrc})`);
+    console.log(`[cron] hot=${hot.length}(${hotSrc}) rising=${rising.length}(${risingSrc}) hn=${hnRaw.length}`);
 
     const raw = dedup([...hot, ...rising]);
 
-    if (raw.length > 0) {
-      const ranked = (hotSrc === "rss" && risingSrc !== "json")
+    if (raw.length > 0 || hnRaw.length > 0) {
+      const redditRanked = (hotSrc === "rss" && risingSrc !== "json")
         ? rankPostsFallback(raw)
         : rankPosts(raw);
-      await cache.set(OVERVIEW_KEY, ranked, CACHE_TTL_MS); // ← uses @upstash/redis SDK
+      const hnRanked = rankPosts(hnRaw);  // HN always has real data
+
+      // Merge, dedup cross-source by url, sort by final score
+      const seenUrls = new Set<string>();
+      const merged: RankedPost[] = [];
+      for (const post of [...redditRanked, ...hnRanked]) {
+        const key = post.source === "hn" ? post.url : post.id;
+        if (seenUrls.has(key)) continue;
+        seenUrls.add(key);
+        merged.push(post);
+      }
+      const ranked = merged.sort((a, b) => b.scores.final - a.scores.final);
+
+      await cache.set(OVERVIEW_KEY, ranked, CACHE_TTL_MS);
       results["overview"] = ranked.length;
+      results["hn"]       = hnRanked.length;
       totalPosts += ranked.length;
-      console.log(`[cron] Overview: ${ranked.length} posts written to Redis`);
+      console.log(`[cron] Overview: ${ranked.length} posts (${hnRanked.length} from HN) written to Redis`);
     } else {
       console.warn("[cron] Overview: 0 posts fetched — Redis not updated");
     }

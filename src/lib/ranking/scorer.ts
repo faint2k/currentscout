@@ -84,7 +84,7 @@ function computeEngagement(
  *   - Short title → penalty
  *   - Deep-dive: high comment-to-upvote ratio → bonus (substantive discussion)
  */
-function computeQuality(
+export function computeQuality(
   title: string,
   numComments: number,
   score: number,
@@ -306,7 +306,9 @@ export function rankPostsFallback(posts: RedditPost[]): RankedPost[] {
         momentum:   trendingScore,  // Trending tab sorts on this
         recency,
         engagement: 0,
-        quality:    0,
+        // Title-based quality works without comment data — keyword bonuses/penalties
+        // still fire. Comment-ratio bonus is 0 (no comments from RSS) which is honest.
+        quality:    computeQuality(post.title, 0, post.score, post.link_flair_text),
         final:      bestScore,      // Best tab sorts on this
       },
       subredditWeight: subWeight,

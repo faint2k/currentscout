@@ -34,8 +34,9 @@ export function truncate(str: string, maxLen: number): string {
   return str.slice(0, maxLen - 1) + "…";
 }
 
-/** Canonical Reddit URL from a permalink */
+/** Canonical discussion URL — handles both Reddit paths and full HN URLs */
 export function redditUrl(permalink: string): string {
+  if (permalink.startsWith("http")) return permalink;   // HN / external full URL
   return `https://reddit.com${permalink}`;
 }
 

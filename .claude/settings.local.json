@@ -5,7 +5,12 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebSearch",
       "WebFetch(domain:currentscout.com)",
-      "WebFetch(domain:www.reddit.com)"
+      "WebFetch(domain:www.reddit.com)",
+      "WebFetch(domain:redditinc.com)",
+      "WebFetch(domain:support.reddithelp.com)",
+      "WebFetch(domain:replydaddy.com)",
+      "WebFetch(domain:molehill.io)",
+      "WebFetch(domain:techcrunch.com)"
     ]
   }
 }
