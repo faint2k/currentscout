@@ -17,7 +17,7 @@ import type { RedditPost } from "./types";
 import { getSubredditConfig } from "../utils/subreddits";
 
 const RSS_BASE    = "https://www.reddit.com/r";
-const USER_AGENT  = "web:aihub:v1.0 (by /u/aihub_bot)";
+const USER_AGENT  = "web:currentscout:v1.0 (by /u/Expensive-Spot6032)";
 
 // ─── XML helpers ─────────────────────────────────────────────────────────────
 

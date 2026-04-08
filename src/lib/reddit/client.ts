@@ -18,7 +18,7 @@ import type { RedditPost, RedditListing } from "./types";
 const PUBLIC_BASE  = "https://www.reddit.com";
 const OAUTH_BASE   = "https://oauth.reddit.com";
 const TOKEN_URL    = "https://www.reddit.com/api/v1/access_token";
-const APP_USER_AGENT = "web:aihub:v1.0 (by /u/aihub_bot)";
+const APP_USER_AGENT = "web:currentscout:v1.0 (by /u/Expensive-Spot6032)";
 
 export type RedditSort = "hot" | "new" | "rising" | "top";
 
