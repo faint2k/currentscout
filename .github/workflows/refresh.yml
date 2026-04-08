@@ -2,140 +2,33 @@ name: Refresh Reddit Feed
 
 on:
   schedule:
-    # Every 15 minutes — runs on Microsoft Azure IPs which Reddit allows.
-    # We fetch Reddit here, then POST raw posts to Vercel for ranking + caching.
-    # Reddit never sees Vercel's datacenter IPs.
+    # Every 15 minutes — triggers Vercel to fetch via RSS and refresh Redis cache
     - cron: "*/15 * * * *"
   workflow_dispatch:
 
 jobs:
   refresh:
-    name: Fetch Reddit & populate Redis
+    name: Refresh feed cache
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 5
 
     steps:
-      - name: Fetch Reddit and ingest
-        env:
-          APP_URL:     ${{ secrets.APP_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      - name: Trigger feed refresh
         run: |
-          python3 << 'EOF'
-          import urllib.request
-          import urllib.error
-          import json
-          import time
-          import os
+          RESPONSE=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            -X GET \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/refresh")
 
-          APP_URL     = os.environ["APP_URL"].rstrip("/")
-          CRON_SECRET = os.environ["CRON_SECRET"]
-          USER_AGENT  = "web:currentscout:v1.2 (by /u/currentscout_bot)"
+          echo "HTTP status: $RESPONSE"
+          echo "Response body:"
+          cat /tmp/response.json
 
-          SUBREDDITS = [
-            # Tier 1
-            "ChatGPT","singularity","MachineLearning","OpenAI","artificial",
-            "StableDiffusion","selfhosted","ClaudeAI","LocalLLaMA",
-            "learnmachinelearning","ChatGPTPro","ChatGPTCoding",
-            "PromptEngineering","AI_Agents","GeminiAI",
-            # Tier 2
-            "deeplearning","vibecoding","aipromptprogramming","ClaudeCode",
-            "Perplexity_AI","comfyui","LLMDevs","LocalLLM","Cursor","ollama",
-            "LangChain","RAG","LanguageTechnology","Unsloth","OpenWebUI",
-            # Tier 3
-            "LargeLanguageModels","AutoGenAI","openrouter","LlamaIndex",
-            "vllm","OpenInterpreter","Groq","aider","Agents","ContinueDev",
-            "ArtificialIntelligence","LocalAI","LMStudio","GPT4All",
-          ]
+          if [ "$RESPONSE" != "200" ]; then
+            echo "Refresh endpoint returned $RESPONSE — failing job"
+            exit 1
+          fi
 
-          def fetch_sub(subreddit, sort="hot", limit=25):
-            url = f"https://www.reddit.com/r/{subreddit}/{sort}.json?limit={limit}&raw_json=1"
-            req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-            try:
-              with urllib.request.urlopen(req, timeout=10) as r:
-                if r.status != 200:
-                  return []
-                data = json.loads(r.read())
-                posts = []
-                for child in data.get("data", {}).get("children", []):
-                  p = child.get("data", {})
-                  posts.append({
-                    "id":                   p.get("id", ""),
-                    "name":                 p.get("name", ""),
-                    "title":                p.get("title", ""),
-                    "selftext":             p.get("selftext", ""),
-                    "url":                  p.get("url", ""),
-                    "permalink":            p.get("permalink", ""),
-                    "author":               p.get("author", ""),
-                    "subreddit":            p.get("subreddit", subreddit),
-                    "subreddit_id":         p.get("subreddit_id", ""),
-                    "score":                p.get("score", 0),
-                    "upvote_ratio":         p.get("upvote_ratio", 0.9),
-                    "num_comments":         p.get("num_comments", 0),
-                    "created_utc":          p.get("created_utc", 0),
-                    "thumbnail":            p.get("thumbnail"),
-                    "is_self":              p.get("is_self", False),
-                    "is_video":             p.get("is_video", False),
-                    "domain":               p.get("domain", ""),
-                    "link_flair_text":      p.get("link_flair_text"),
-                    "link_flair_css_class": p.get("link_flair_css_class"),
-                    "stickied":             p.get("stickied", False),
-                    "over_18":              p.get("over_18", False),
-                    "spoiler":              p.get("spoiler", False),
-                    "locked":               p.get("locked", False),
-                  })
-                return posts
-            except Exception as e:
-              print(f"  WARN: r/{subreddit} {sort} failed: {e}")
-              return []
-
-          all_posts = []
-          seen_ids  = set()
-          total_subs_ok = 0
-
-          print(f"Fetching {len(SUBREDDITS)} subreddits...")
-
-          for i, sub in enumerate(SUBREDDITS):
-            hot = fetch_sub(sub, "hot", 25)
-            if hot:
-              total_subs_ok += 1
-            # Fetch rising for first 15 (tier 1)
-            rising = fetch_sub(sub, "rising", 15) if i < 15 else []
-
-            for p in hot + rising:
-              if p["id"] and p["id"] not in seen_ids:
-                seen_ids.add(p["id"])
-                all_posts.append(p)
-
-            # Polite rate limit: 60 req/min max
-            if (i + 1) % 10 == 0:
-              time.sleep(1)
-
-          print(f"Fetched {len(all_posts)} unique posts from {total_subs_ok}/{len(SUBREDDITS)} subreddits")
-
-          if len(all_posts) == 0:
-            print("ERROR: 0 posts fetched — aborting")
-            exit(1)
-
-          # POST to Vercel ingest endpoint
-          payload     = json.dumps({"posts": all_posts}).encode("utf-8")
-          ingest_req  = urllib.request.Request(
-            f"{APP_URL}/api/cron/ingest",
-            data    = payload,
-            headers = {
-              "Authorization": f"Bearer {CRON_SECRET}",
-              "Content-Type":  "application/json",
-              "User-Agent":    USER_AGENT,
-            },
-            method = "POST",
-          )
-
-          try:
-            with urllib.request.urlopen(ingest_req, timeout=30) as r:
-              result = json.loads(r.read())
-              print(f"Ingest OK — {result.get('total_posts')} posts ranked in {result.get('elapsed_ms')}ms")
-          except urllib.error.HTTPError as e:
-            body = e.read().decode()
-            print(f"ERROR: Ingest returned HTTP {e.code}: {body}")
-            exit(1)
-
-          EOF
+          TOTAL=$(cat /tmp/response.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('total_posts', 'n/a'))")
+          ELAPSED=$(cat /tmp/response.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('elapsed_ms', 'n/a'))")
+          echo "Posts refreshed: $TOTAL in ${ELAPSED}ms"
