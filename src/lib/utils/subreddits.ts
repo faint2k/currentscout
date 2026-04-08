@@ -29,7 +29,7 @@ export const SUBREDDITS: SubredditConfig[] = [
   { name: "OpenAI",               tier: 1, weight: 1.50, subscribers:  2_701_587, category: "Frontier AI",    description: "OpenAI products and news" },
   { name: "artificial",           tier: 1, weight: 1.50, subscribers:  1_246_780, category: "General AI",     description: "Artificial intelligence news" },
   { name: "StableDiffusion",      tier: 1, weight: 1.50, subscribers:    922_912, category: "Image AI",       description: "Stable Diffusion" },
-  { name: "selfhosted",           tier: 1, weight: 1.50, subscribers:    736_983, category: "Infrastructure", description: "Self-hosted AI infrastructure" },
+  { name: "selfhosted",           tier: 3, weight: 1.15, subscribers:    736_983, category: "Infrastructure", description: "Self-hosted infrastructure" },
   { name: "ClaudeAI",             tier: 1, weight: 1.50, subscribers:    720_304, category: "Frontier AI",    description: "Claude AI assistant" },
   { name: "LocalLLaMA",           tier: 1, weight: 1.50, subscribers:    679_979, category: "Local AI",       description: "Local LLM running and inference" },
   { name: "learnmachinelearning", tier: 1, weight: 1.50, subscribers:    625_855, category: "Learning",       description: "ML learning community" },

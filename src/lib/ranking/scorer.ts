@@ -292,8 +292,12 @@ export function rankPostsFallback(posts: RedditPost[]): RankedPost[] {
     // Junk penalty — megathreads, memes, nostalgia posts
     const junkMultiplier = isFallbackJunk(post.title) ? 0.4 : 1.0;
 
-    const raw        = (0.55 * positionSignal + 0.45 * recency);
-    const finalScore = raw * subWeight * junkMultiplier;
+    // "Best" (scores.final): trust Reddit's hot ranking — position × sub weight.
+    // Recency already baked into feed position. Don't double-count it.
+    const bestScore = positionSignal * subWeight * junkMultiplier;
+
+    // "Trending" (scores.momentum): what's fresh AND climbing right now.
+    const trendingScore = (0.55 * positionSignal + 0.45 * recency) * junkMultiplier;
 
     const badges: SignalBadge[] = [];
     if (hoursOld < 3 && positionSignal >= 70) badges.push("Rising");
@@ -302,11 +306,11 @@ export function rankPostsFallback(posts: RedditPost[]): RankedPost[] {
       ...post,
       hoursOld,
       scores: {
-        momentum:   positionSignal,
+        momentum:   trendingScore,  // Trending tab sorts on this
         recency,
         engagement: 0,
         quality:    0,
-        final:      finalScore,
+        final:      bestScore,      // Best tab sorts on this
       },
       subredditWeight: subWeight,
       badges,
