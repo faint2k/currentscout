@@ -4,12 +4,14 @@ import React, { useState, useCallback } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useFeedStore } from "../../stores/feedStore";
+import { MobileNav } from "./MobileNav";
 
 export function TopBar() {
   const pathname = usePathname();
   const router   = useRouter();
   const { filters, setFilters } = useFeedStore();
   const [search, setSearch] = useState(filters.search);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const handleSearch = useCallback(
     (e: React.FormEvent) => {
@@ -26,8 +28,21 @@ export function TopBar() {
   ];
 
   return (
+    <>
+    <MobileNav open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
     <header className="sticky top-0 z-40 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur-sm">
       <div className="flex items-center gap-4 px-4 h-12 max-w-screen-2xl mx-auto">
+        {/* Hamburger — mobile only */}
+        <button
+          onClick={() => setMobileNavOpen(true)}
+          className="lg:hidden flex flex-col justify-center items-center w-8 h-8 gap-1.5 shrink-0"
+          aria-label="Open menu"
+        >
+          <span className="w-5 h-px bg-zinc-400" />
+          <span className="w-5 h-px bg-zinc-400" />
+          <span className="w-5 h-px bg-zinc-400" />
+        </button>
+
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 shrink-0">
           <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm">
@@ -38,8 +53,8 @@ export function TopBar() {
           </span>
         </Link>
 
-        {/* Nav links */}
-        <nav className="flex items-center gap-1 ml-2">
+        {/* Nav links — hidden on mobile (drawer handles navigation) */}
+        <nav className="hidden lg:flex items-center gap-1 ml-2">
           {navLinks.map(({ href, label }) => {
             const isActive = href === "/" ? pathname === "/" : pathname.startsWith(href);
             return (
@@ -58,8 +73,8 @@ export function TopBar() {
           })}
         </nav>
 
-        {/* Search */}
-        <form onSubmit={handleSearch} className="flex-1 max-w-md ml-auto">
+        {/* Search — hidden on mobile (mobile strip below has its own) */}
+        <form onSubmit={handleSearch} className="hidden md:block flex-1 max-w-md ml-auto">
           <div className="relative">
             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500 text-xs">⌕</span>
             <input
@@ -100,6 +115,50 @@ export function TopBar() {
           <option value="all">All</option>
         </select>
       </div>
+
+      {/* Mobile filter strip — visible below md */}
+      <div className="md:hidden flex items-center gap-2 px-3 py-2 border-t border-zinc-800/60 overflow-x-auto scrollbar-none">
+        <select
+          value={filters.sort}
+          onChange={(e) => setFilters({ sort: e.target.value as typeof filters.sort })}
+          className="bg-zinc-800 border border-zinc-700/50 text-zinc-300 text-xs rounded px-2 py-1.5 focus:outline-none shrink-0"
+        >
+          <option value="weighted">Best</option>
+          <option value="trending">Trending</option>
+          <option value="hot">Hot</option>
+          <option value="new">New</option>
+          <option value="top">Top</option>
+        </select>
+
+        <select
+          value={filters.time}
+          onChange={(e) => setFilters({ time: e.target.value as typeof filters.time })}
+          className="bg-zinc-800 border border-zinc-700/50 text-zinc-300 text-xs rounded px-2 py-1.5 focus:outline-none shrink-0"
+        >
+          <option value="1h">1h</option>
+          <option value="4h">4h</option>
+          <option value="12h">12h</option>
+          <option value="24h">24h</option>
+          <option value="3d">3d</option>
+          <option value="7d">7d</option>
+          <option value="all">All time</option>
+        </select>
+
+        {/* Inline search for mobile */}
+        <form onSubmit={handleSearch} className="flex-1 min-w-0">
+          <div className="relative">
+            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-500 text-xs">⌕</span>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search…"
+              className="w-full bg-zinc-800/80 border border-zinc-700/50 rounded pl-6 pr-2 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-violet-600/60"
+            />
+          </div>
+        </form>
+      </div>
     </header>
+    </>
   );
 }
