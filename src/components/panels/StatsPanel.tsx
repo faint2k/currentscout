@@ -23,8 +23,7 @@ export function StatsPanel() {
           <h2 className="text-xs font-semibold text-zinc-200">CurrentScout</h2>
         </div>
         <p className="text-[11px] text-zinc-500 leading-relaxed">
-          A trending-first Reddit dashboard for the AI community. Posts ranked by momentum, engagement,
-          and subreddit signal weight.
+          The AI internet, distilled. Ranked signal from the communities where AI actually happens — scored by momentum, engagement, and source weight.
         </p>
       </div>
 

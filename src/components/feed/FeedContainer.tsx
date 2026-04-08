@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { PostList } from "./PostList";
 import { FilterBar } from "../filters/FilterBar";
+import { SITE_TAGLINE, SITE_KICKER } from "../../lib/config";
 import type { RankedPost } from "../../lib/reddit/types";
 
 interface FeedContainerProps {
@@ -14,6 +15,7 @@ interface FeedContainerProps {
   initialFetchedAt?: number;
   initialCached?: boolean;
   showRank?: boolean;
+  showHero?: boolean;
 }
 
 export function FeedContainer({
@@ -24,6 +26,7 @@ export function FeedContainer({
   initialFetchedAt,
   initialCached,
   showRank = false,
+  showHero = false,
 }: FeedContainerProps) {
   const [posts,     setPosts]     = useState<RankedPost[]>(initialPosts ?? []);
   const [loading,   setLoading]   = useState(!initialPosts);
@@ -94,11 +97,24 @@ export function FeedContainer({
 
   return (
     <div>
+      {showHero && (
+        <div className="mb-5 pt-1">
+          <h1 className="text-xl sm:text-2xl font-bold text-zinc-100 leading-snug tracking-tight">
+            {SITE_TAGLINE.split("before")[0]}
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-indigo-400">
+              before it goes mainstream.
+            </span>
+          </h1>
+          <p className="text-sm text-zinc-500 mt-1.5 font-medium">
+            {SITE_KICKER}
+          </p>
+        </div>
+      )}
       <FilterBar
         totalPosts={posts.length}
         fetchedAt={fetchedAt}
         cached={cached}
-        label={label}
+        label={showHero ? undefined : label}
       />
       <PostList posts={posts} showRank={showRank} />
     </div>
