@@ -11,7 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchMultipleSubreddits, fetchSubredditPosts } from "../../../../lib/reddit/client";
 import { fetchMultipleSubredditsRSS, fetchSubredditRSS } from "../../../../lib/reddit/rss";
-import { rankPosts } from "../../../../lib/ranking/scorer";
+import { rankPosts, rankPostsFallback } from "../../../../lib/ranking/scorer";
 import { cache } from "../../../../lib/cache/store";
 import { SUBREDDIT_NAMES } from "../../../../lib/utils/subreddits";
 import type { RedditPost } from "../../../../lib/reddit/types";
@@ -67,7 +67,9 @@ export async function GET(req: NextRequest) {
     const raw = dedup([...hot, ...rising]);
 
     if (raw.length > 0) {
-      const ranked = rankPosts(raw);
+      const ranked = (hotSrc === "rss" && risingSrc !== "json")
+        ? rankPostsFallback(raw)
+        : rankPosts(raw);
       await cache.set(OVERVIEW_KEY, ranked, CACHE_TTL_MS); // ← uses @upstash/redis SDK
       results["overview"] = ranked.length;
       totalPosts += ranked.length;

@@ -230,3 +230,74 @@ export function filterTrending(posts: RankedPost[]): RankedPost[] {
       p.scores.final    >= 40
   );
 }
+
+// ─── RSS fallback ranker ──────────────────────────────────────────────────────
+//
+// Used when Reddit API is unavailable and data comes from RSS feeds.
+//
+// What RSS actually gives us:
+//   - Feed position  → encoded in post.score (scaled by subscriber count)
+//   - Post age       → post.created_utc (reliable)
+//   - Subreddit      → name + tier weight (reliable)
+//
+// What RSS does NOT give us (do not pretend otherwise):
+//   - Real upvote counts  → fake position-based estimate
+//   - Comment counts      → always 0, Reddit removed from RSS
+//   - Upvote ratio        → hardcoded 0.90, meaningless
+//
+// Formula: 50% feed position signal + 35% recency + 15% subreddit tier
+// Simple, honest, proportional to what we actually know.
+//
+// The full rankPosts() algorithm above is preserved and unchanged —
+// it activates automatically once REDDIT_CLIENT_ID + REDDIT_CLIENT_SECRET
+// are set in env vars and the OAuth application is approved.
+
+export function rankPostsFallback(posts: RedditPost[]): RankedPost[] {
+  const now = Date.now() / 1000;
+
+  const scored = posts.map((post) => {
+    const hoursOld = Math.max(0, (now - post.created_utc) / 3600);
+
+    // Feed position signal: Reddit's own hot algorithm already ranked these.
+    // post.score is our subscriber-scaled position estimate from rss.ts.
+    // Normalise against a ceiling of 1500 (ChatGPT #1 post ceiling).
+    const positionSignal = Math.min(100, (Math.log1p(post.score) / Math.log1p(1500)) * 100);
+
+    // Recency: linear decay over 7 days — same window as main algo
+    const recency = Math.max(0, (1 - hoursOld / RECENCY_WINDOW_HOURS) * 100);
+
+    // Subreddit tier weight (1.15–1.50) — the one reliable quality signal we have
+    const subWeight = getSubredditWeight(post.subreddit);
+
+    const raw = (0.50 * positionSignal + 0.35 * recency + 0.15 * subWeight * 50);
+    const finalScore = raw * subWeight;
+
+    // Badges: only Rising makes sense without real engagement data
+    const badges: SignalBadge[] = [];
+    if (hoursOld < 3 && positionSignal >= 60) badges.push("Rising");
+
+    return {
+      ...post,
+      hoursOld,
+      scores: {
+        momentum:   positionSignal, // position signal standing in for momentum
+        recency,
+        engagement: 0,              // honestly 0 — we have no engagement data
+        quality:    0,              // not scoring quality on fake data
+        final:      finalScore,
+      },
+      subredditWeight: subWeight,
+      badges,
+    } as RankedPost;
+  });
+
+  // Batch normalise — same as main algo
+  const maxRaw = Math.max(...scored.map((p) => p.scores.final), 1);
+
+  return scored
+    .map((p) => ({
+      ...p,
+      scores: { ...p.scores, final: Math.round((p.scores.final / maxRaw) * 100) },
+    }))
+    .sort((a, b) => b.scores.final - a.scores.final);
+}

@@ -12,7 +12,7 @@
 
 import { fetchMultipleSubreddits, fetchSubredditPosts } from "./client";
 import { fetchMultipleSubredditsRSS, fetchSubredditRSS } from "./rss";
-import { rankPosts } from "../ranking/scorer";
+import { rankPosts, rankPostsFallback } from "../ranking/scorer";
 import { cache } from "../cache/store";
 import { SUBREDDIT_NAMES } from "../utils/subreddits";
 import { getMockPosts } from "../../data/mock";
@@ -37,11 +37,13 @@ export async function fetchOverviewFeed(
   console.warn("[fetcher] Redis cold start — fetching directly (one-time)");
 
   let raw = await fetchMultipleSubreddits(subreddits, { sort: "hot", limit: 25 });
+  let isRSS = false;
 
   // JSON API blocked? Fall back to RSS
   if (raw.length === 0) {
-    console.warn("[fetcher] JSON API failed — trying RSS fallback");
-    raw = await fetchMultipleSubredditsRSS(subreddits, "hot", 25);
+    console.warn("[fetcher] JSON API failed — using RSS fallback (limited data)");
+    raw    = await fetchMultipleSubredditsRSS(subreddits, "hot", 25);
+    isRSS  = true;
   }
 
   const rising = raw.length > 0
@@ -63,7 +65,7 @@ export async function fetchOverviewFeed(
   const seen = new Set<string>();
   raw = raw.filter((p) => { if (seen.has(p.id)) return false; seen.add(p.id); return true; });
 
-  const ranked = rankPosts(raw);
+  const ranked = isRSS ? rankPostsFallback(raw) : rankPosts(raw);
   await cache.set(OVERVIEW_KEY(subreddits), ranked, CACHE_TTL_MS);
 
   return { posts: ranked, cached: false, fetchedAt: Date.now(), sources: subreddits };
@@ -108,7 +110,8 @@ export async function fetchSubredditFeed(
   const seen = new Set<string>();
   raw = raw.filter((p) => { if (seen.has(p.id)) return false; seen.add(p.id); return true; });
 
-  const ranked = rankPosts(raw);
+  const isRSSSub = hot.length === 0; // if hot came from RSS, all did
+  const ranked   = isRSSSub ? rankPostsFallback(raw) : rankPosts(raw);
   await cache.set(SUB_KEY(subreddit), ranked, CACHE_TTL_MS);
 
   return { posts: ranked, cached: false, fetchedAt: Date.now() };
