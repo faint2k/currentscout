@@ -11,6 +11,7 @@ export default function OverviewPage() {
         mode="overview"
         label="Overview"
         showRank
+        showHero
       />
     </AppLayout>
   );

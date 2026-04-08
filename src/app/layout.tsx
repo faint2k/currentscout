@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { SITE_NAME, SITE_TOPIC, SITE_KICKER, SITE_DESCRIPTION } from "../lib/config";
 
 export const metadata: Metadata = {
-  title: "CurrentScout — AI Reddit Dashboard",
-  description:
-    "CurrentScout: a trending-first Reddit dashboard for AI. Aggregates and ranks posts from 40+ AI subreddits.",
-  keywords: ["AI", "LLM", "machine learning", "reddit", "dashboard", "LocalLLaMA", "ClaudeCode"],
+  title: `${SITE_NAME} — ${SITE_KICKER}`,
+  description: SITE_DESCRIPTION,
+  keywords: [SITE_TOPIC, "LLM", "machine learning", "trending", "signal", "communities"],
+  icons: { icon: "/favicon.svg" },
 };
 
 export default function RootLayout({
