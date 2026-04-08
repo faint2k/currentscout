@@ -286,8 +286,11 @@ export function rankPostsFallback(posts: RedditPost[]): RankedPost[] {
     // Spread in practice: ~15 (tiny sub, mid-feed) … ~85 (top post, biggest sub).
     const bestScore = Math.min(100, (post.score / 2000) * subWeight * junkMultiplier * 100);
 
-    // "Trending" (scores.momentum): position + recency — what's climbing now.
-    const trendingScore = Math.min(100, ((0.55 * positionSignal + 0.45 * recency) / 100) * subWeight * junkMultiplier * 100);
+    // "Trending" (scores.momentum): feed position + freshness.
+    // subWeight intentionally excluded — trending velocity is about speed,
+    // not sub size (that's already captured in bestScore).
+    // Range: 0–100 naturally; no cap needed in practice.
+    const trendingScore = (0.55 * positionSignal + 0.45 * recency) * junkMultiplier;
 
     const badges: SignalBadge[] = [];
     if (hoursOld < 3 && positionSignal >= 70) badges.push("Rising");
