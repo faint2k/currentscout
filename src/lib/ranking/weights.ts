@@ -75,9 +75,12 @@ export const TECHNICAL_KEYWORD_CAP   = 40;
 // ─── Signal badge thresholds ──────────────────────────────────────────────────
 
 export const BADGE_THRESHOLDS = {
-  trending:   72, // momentum score ≥ 72 → "Trending" badge
-  hot:        68, // engagement score ≥ 68 → "Hot" badge
-  rising:     58, // recency ≥ 80 AND momentum ≥ 45 → "Rising" badge
-  deepDive:   0.06, // comments/score ratio ≥ 0.06 → "Deep Dive" badge
-  highSignal: 70, // final weighted score ≥ 70 → "High Signal" badge
+  trending:             72,   // momentum ≥ 72 → "Trending"
+  hot:                  68,   // engagement ≥ 68 → "Hot"
+  rising:               58,   // recency ≥ 80 AND momentum ≥ 45 → "Rising"
+  deepDive:             0.06, // comments/score ratio ≥ 0.06 → "Deep Dive"
+  // High Signal requires strength across all three dimensions
+  highSignalMomentum:   60,
+  highSignalEngagement: 55,
+  highSignalQuality:    58,
 } as const;

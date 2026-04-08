@@ -51,7 +51,7 @@ export function TrendingPanel() {
           </div>
           <div className="flex justify-between">
             <span className="text-green-400">◆ High Signal</span>
-            <span className="text-zinc-500">final ≥ {BADGE_THRESHOLDS.highSignal}</span>
+            <span className="text-zinc-500">momentum + engagement + quality</span>
           </div>
         </div>
       </div>

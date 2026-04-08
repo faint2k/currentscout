@@ -123,20 +123,25 @@ function computeBadges(
   momentumScore: number,
   recencyScore: number,
   engagementScore: number,
-  finalScore: number,
+  qualityScore: number,
   numComments: number,
   score: number
 ): SignalBadge[] {
   const badges: SignalBadge[] = [];
 
-  if (momentumScore  >= BADGE_THRESHOLDS.trending)  badges.push("Trending");
-  if (engagementScore >= BADGE_THRESHOLDS.hot)       badges.push("Hot");
-  if (recencyScore   >= 80 && momentumScore >= 45)   badges.push("Rising");
+  if (momentumScore   >= BADGE_THRESHOLDS.trending)              badges.push("Trending");
+  if (engagementScore >= BADGE_THRESHOLDS.hot)                   badges.push("Hot");
+  if (recencyScore    >= 80 && momentumScore >= 45)              badges.push("Rising");
 
   const commentRatio = numComments / Math.max(score, 1);
-  if (commentRatio  >= BADGE_THRESHOLDS.deepDive)    badges.push("Deep Dive");
+  if (commentRatio   >= BADGE_THRESHOLDS.deepDive)               badges.push("Deep Dive");
 
-  if (finalScore    >= BADGE_THRESHOLDS.highSignal)  badges.push("High Signal");
+  // High Signal: strong across multiple dimensions — not just one spike
+  if (
+    momentumScore   >= BADGE_THRESHOLDS.highSignalMomentum &&
+    engagementScore >= BADGE_THRESHOLDS.highSignalEngagement &&
+    qualityScore    >= BADGE_THRESHOLDS.highSignalQuality
+  ) badges.push("High Signal");
 
   return badges;
 }
@@ -159,10 +164,11 @@ export function rankPost(post: RedditPost): RankedPost {
     SCORE_WEIGHTS.quality    * quality;
 
   const subWeight   = getSubredditWeight(post.subreddit);
-  const finalScore  = Math.min(100, raw * subWeight);
+  // Uncapped — rankPosts normalises across the batch so only #1 hits 100
+  const finalScore  = raw * subWeight;
 
   const badges = computeBadges(
-    momentum, recency, engagement, finalScore,
+    momentum, recency, engagement, quality,
     post.num_comments, post.score
   );
 
@@ -176,8 +182,21 @@ export function rankPost(post: RedditPost): RankedPost {
 }
 
 export function rankPosts(posts: RedditPost[]): RankedPost[] {
-  return posts
-    .map(rankPost)
+  const ranked = posts.map(rankPost);
+
+  // Normalise final scores across the batch:
+  // best post = 100, everything else scales proportionally.
+  // This ensures score spread reflects real relative differences.
+  const maxRaw = Math.max(...ranked.map((p) => p.scores.final), 1);
+
+  return ranked
+    .map((p) => ({
+      ...p,
+      scores: {
+        ...p.scores,
+        final: Math.round((p.scores.final / maxRaw) * 100),
+      },
+    }))
     .sort((a, b) => b.scores.final - a.scores.final);
 }
 
