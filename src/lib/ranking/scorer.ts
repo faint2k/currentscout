@@ -252,38 +252,60 @@ export function filterTrending(posts: RankedPost[]): RankedPost[] {
 // it activates automatically once REDDIT_CLIENT_ID + REDDIT_CLIENT_SECRET
 // are set in env vars and the OAuth application is approved.
 
+// Patterns that identify low-value posts even without engagement data
+const FALLBACK_JUNK_PATTERNS = [
+  /\beli5\b/i,              // ELI5 megathreads
+  /\bweekly\b.*\bthread\b/i,
+  /\bdaily\b.*\bthread\b/i,
+  /\bmonday\b|\btuesday\b|\bwednesday\b|\bthursday\b|\bfriday\b/i, // day megathreads
+  /in a nutshell/i,
+  /years? ago/i,            // nostalgia/history posts
+  /tech bros/i,
+  /\bbusyb.*student/i,
+];
+
+function isFallbackJunk(title: string): boolean {
+  return FALLBACK_JUNK_PATTERNS.some((p) => p.test(title));
+}
+
 export function rankPostsFallback(posts: RedditPost[]): RankedPost[] {
   const now = Date.now() / 1000;
+
+  // Find max score in batch for relative position signal (max spread)
+  const maxScore = Math.max(...posts.map((p) => p.score), 1);
+
+  // Shorter recency window — 48h gives real spread between a 2h and 12h post
+  const FALLBACK_RECENCY_WINDOW = 48;
 
   const scored = posts.map((post) => {
     const hoursOld = Math.max(0, (now - post.created_utc) / 3600);
 
-    // Feed position signal: Reddit's own hot algorithm already ranked these.
-    // post.score is our subscriber-scaled position estimate from rss.ts.
-    // Normalise against a ceiling of 1500 (ChatGPT #1 post ceiling).
-    const positionSignal = Math.min(100, (Math.log1p(post.score) / Math.log1p(1500)) * 100);
+    // Position signal: raw ratio against batch max — maximum spread
+    const positionSignal = (post.score / maxScore) * 100;
 
-    // Recency: linear decay over 7 days — same window as main algo
-    const recency = Math.max(0, (1 - hoursOld / RECENCY_WINDOW_HOURS) * 100);
+    // Recency: 48h window gives meaningful spread across the feed
+    const recency = Math.max(0, (1 - hoursOld / FALLBACK_RECENCY_WINDOW) * 100);
 
-    // Subreddit tier weight (1.15–1.50) — the one reliable quality signal we have
+    // Subreddit tier weight — our most reliable quality signal
     const subWeight = getSubredditWeight(post.subreddit);
 
-    const raw = (0.50 * positionSignal + 0.35 * recency + 0.15 * subWeight * 50);
-    const finalScore = raw * subWeight;
+    // Junk penalty — megathreads, memes, nostalgia posts
+    const junkMultiplier = isFallbackJunk(post.title) ? 0.4 : 1.0;
 
-    // Badges: only Rising makes sense without real engagement data
+    const raw        = (0.55 * positionSignal + 0.45 * recency);
+    const finalScore = raw * subWeight * junkMultiplier;
+
     const badges: SignalBadge[] = [];
-    if (hoursOld < 3 && positionSignal >= 60) badges.push("Rising");
+    if (hoursOld < 3 && positionSignal >= 70) badges.push("Rising");
 
     return {
       ...post,
       hoursOld,
       scores: {
-        momentum:   positionSignal, // position signal standing in for momentum
+        momentum:   positionSignal,
         recency,
-        engagement: 0,              // honestly 0 — we have no engagement data
-        quality:    0,              // not scoring quality on fake data
+        engagement: 0,
+        quality:    0,
         final:      finalScore,
       },
       subredditWeight: subWeight,
@@ -291,7 +313,7 @@ export function rankPostsFallback(posts: RedditPost[]): RankedPost[] {
     } as RankedPost;
   });
 
-  // Batch normalise — same as main algo
+  // Batch normalise
   const maxRaw = Math.max(...scored.map((p) => p.scores.final), 1);
 
   return scored
