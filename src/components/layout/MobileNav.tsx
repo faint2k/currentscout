@@ -10,7 +10,6 @@ const TIER_DOT: Record<number, string> = {
   1: "bg-violet-500",
   2: "bg-blue-500",
   3: "bg-zinc-500",
-  4: "bg-zinc-600",
 };
 
 interface MobileNavProps {
