@@ -57,12 +57,22 @@ function parseExternalUrl(contentHtml: string, permalink: string): string {
 
 /**
  * Estimate score from feed position scaled by subreddit size.
- * A #1 post in ChatGPT (11M members) should outscore #1 in vllm (2K members).
- * Normalised around 100K subscribers as a baseline.
+ *
+ * Squaring the log-ratio gives community size real discriminating power:
+ *   ChatGPT  (11.4M) → scale ≈ 1.99   (was 1.41 with linear log)
+ *   singularity (3.9M) → scale ≈ 1.74  (was 1.32)
+ *   StableDiffusion (922K) → scale ≈ 1.42 (was 1.19)
+ *   openrouter  (6.8K) → scale ≈ 0.59  (was 0.77)
+ *
+ * Why this matters: a position-2 post in a 11M-subscriber community should
+ * outscore a position-0 post in a 900K community. With linear log it didn't.
+ * Squaring the ratio gives a 40% gap between ChatGPT and StableDiffusion,
+ * enough that feed-position differences stop swamping community-size signal.
  */
 function estimatedScore(position: number, subscribers: number): number {
   const baseScore  = Math.max(10, Math.round(800 * Math.exp(-position * 0.14)));
-  const subScale   = Math.log1p(Math.max(subscribers, 1_000)) / Math.log1p(100_000);
+  const logRatio   = Math.log1p(Math.max(subscribers, 1_000)) / Math.log1p(100_000);
+  const subScale   = logRatio ** 2;
   return Math.round(baseScore * subScale);
 }
 

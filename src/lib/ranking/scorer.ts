@@ -281,10 +281,11 @@ export function rankPostsFallback(posts: RedditPost[]): RankedPost[] {
     const junkMultiplier = isFallbackJunk(post.title) ? 0.4 : 1.0;
 
     // "Best" (scores.final): absolute scale based on what we actually know.
-    // Normaliser 2000 is calibrated to the max possible RSS score (~1130 for
-    // ChatGPT position-0 × Tier-1 weight 1.50 ≈ 84.7 — never hits ceiling).
-    // Spread in practice: ~15 (tiny sub, mid-feed) … ~85 (top post, biggest sub).
-    const bestScore = Math.min(100, (post.score / 2000) * subWeight * junkMultiplier * 100);
+    // Normaliser 2500 calibrated to squared-log subScale in rss.ts:
+    //   ChatGPT pos-0 max ≈ 1593 → 1593/2500 × 1.50 × 100 = 95.6 (near ceiling, not at it)
+    //   StableDiffusion pos-0 ≈ 1138 → 68.3
+    //   Spread in practice: ~10 (tiny sub, mid-feed) … ~95 (top post, biggest sub).
+    const bestScore = Math.min(100, (post.score / 2500) * subWeight * junkMultiplier * 100);
 
     // "Trending" (scores.momentum): feed position + freshness.
     // subWeight intentionally excluded — trending velocity is about speed,
