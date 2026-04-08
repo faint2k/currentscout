@@ -169,9 +169,10 @@ export function rankPost(post: RedditPost): RankedPost {
     SCORE_WEIGHTS.engagement * engagement +
     SCORE_WEIGHTS.quality    * quality;
 
-  const subWeight   = getSubredditWeight(post.subreddit);
-  // Uncapped — rankPosts normalises across the batch so only #1 hits 100
-  const finalScore  = raw * subWeight;
+  const subWeight  = getSubredditWeight(post.subreddit);
+  // Absolute scale: 100 = perfect score on all dimensions from a Tier 1 sub.
+  // Most real posts land 40–85. No batch normalisation — the number means something.
+  const finalScore = Math.min(100, raw * subWeight);
 
   const badges = computeBadges(
     momentum, recency, engagement, quality,
@@ -190,19 +191,7 @@ export function rankPost(post: RedditPost): RankedPost {
 export function rankPosts(posts: RedditPost[]): RankedPost[] {
   const ranked = posts.map(rankPost);
 
-  // Normalise final scores across the batch:
-  // best post = 100, everything else scales proportionally.
-  // This ensures score spread reflects real relative differences.
-  const sorted = ranked.sort((a, b) => b.scores.final - a.scores.final);
-  const n      = sorted.length;
-
-  return sorted.map((p, i) => ({
-    ...p,
-    scores: {
-      ...p.scores,
-      final: Math.round(100 - (i / Math.max(n - 1, 1)) * 99),
-    },
-  }));
+  return ranked.sort((a, b) => b.scores.final - a.scores.final);
 }
 
 /**
@@ -291,12 +280,14 @@ export function rankPostsFallback(posts: RedditPost[]): RankedPost[] {
     // Junk penalty — megathreads, memes, nostalgia posts
     const junkMultiplier = isFallbackJunk(post.title) ? 0.4 : 1.0;
 
-    // "Best" (scores.final): trust Reddit's hot ranking — position × sub weight.
-    // Recency already baked into feed position. Don't double-count it.
-    const bestScore = positionSignal * subWeight * junkMultiplier;
+    // "Best" (scores.final): absolute scale based on what we actually know.
+    // Normaliser 2000 is calibrated to the max possible RSS score (~1130 for
+    // ChatGPT position-0 × Tier-1 weight 1.50 ≈ 84.7 — never hits ceiling).
+    // Spread in practice: ~15 (tiny sub, mid-feed) … ~85 (top post, biggest sub).
+    const bestScore = Math.min(100, (post.score / 2000) * subWeight * junkMultiplier * 100);
 
-    // "Trending" (scores.momentum): what's fresh AND climbing right now.
-    const trendingScore = (0.55 * positionSignal + 0.45 * recency) * junkMultiplier;
+    // "Trending" (scores.momentum): position + recency — what's climbing now.
+    const trendingScore = Math.min(100, ((0.55 * positionSignal + 0.45 * recency) / 100) * subWeight * junkMultiplier * 100);
 
     const badges: SignalBadge[] = [];
     if (hoursOld < 3 && positionSignal >= 70) badges.push("Rising");
@@ -316,17 +307,5 @@ export function rankPostsFallback(posts: RedditPost[]): RankedPost[] {
     } as RankedPost;
   });
 
-  // Sort by raw score first, then assign display scores by rank.
-  // Batch normalisation causes clustering — top posts all end up at 98-100
-  // because their raw scores are similar. Rank-based display is honest.
-  const sorted = scored.sort((a, b) => b.scores.final - a.scores.final);
-  const n      = sorted.length;
-
-  return sorted.map((p, i) => ({
-    ...p,
-    scores: {
-      ...p.scores,
-      final: Math.round(100 - (i / Math.max(n - 1, 1)) * 99),
-    },
-  }));
+  return scored.sort((a, b) => b.scores.final - a.scores.final);
 }
