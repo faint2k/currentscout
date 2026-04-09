@@ -74,7 +74,7 @@ export function Sidebar() {
       {/* Categories + subreddits */}
       <div className="px-3 space-y-0.5 pb-4">
         <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider px-1 mb-1.5">
-          Communities
+          Communities — click to browse, ✓ to filter
         </p>
 
         {visibleCats.map((cat) => {
@@ -109,7 +109,7 @@ export function Sidebar() {
                               ? "bg-violet-600 border-violet-500"
                               : "border-zinc-600 hover:border-zinc-400"
                           }`}
-                          title={filtered ? "Remove from filter" : "Add to filter"}
+                          title="Filter feed to this community"
                         >
                           {filtered && <span className="text-white text-[8px]">✓</span>}
                         </button>

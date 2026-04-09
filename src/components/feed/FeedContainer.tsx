@@ -119,9 +119,8 @@ export function FeedContainer({
       {showHero && (
         <div className="mb-5 pt-1">
           <h1 className="text-xl sm:text-2xl font-bold text-zinc-100 leading-snug tracking-tight">
-            {SITE_TAGLINE.split("before")[0]}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-indigo-400">
-              before it goes mainstream.
+              {SITE_TAGLINE}
             </span>
           </h1>
           <p className="text-sm text-zinc-500 mt-1.5 font-medium">

@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { SUBREDDITS, CATEGORIES } from "../../lib/utils/subreddits";
 
@@ -12,6 +12,8 @@ const TIER_COLOR = {
 } as const;
 
 export function StatsPanel() {
+  const [formulaOpen, setFormulaOpen] = useState(false);
+
   return (
     <div className="space-y-4">
       {/* About */}
@@ -27,29 +29,37 @@ export function StatsPanel() {
         </p>
       </div>
 
-      {/* Score formula */}
+      {/* Score formula — collapsible */}
       <div className="bg-zinc-900 border border-zinc-800/70 rounded-lg p-3">
-        <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-wider mb-2">
-          Ranking Formula
-        </p>
-        <div className="space-y-1 text-[10px]">
-          {[
-            { label: "Momentum",   pct: "35%", desc: "Upvotes/hour velocity",      color: "bg-violet-500" },
-            { label: "Recency",    pct: "25%", desc: "Time decay over 7 days",     color: "bg-blue-500" },
-            { label: "Engagement", pct: "30%", desc: "Score + comments (log1p)",   color: "bg-green-500" },
-            { label: "Quality",    pct: "10%", desc: "Technical depth heuristics", color: "bg-yellow-500" },
-          ].map(({ label, pct, desc, color }) => (
-            <div key={label} className="flex items-center gap-2">
-              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${color}`} />
-              <span className="text-zinc-300 w-16">{label}</span>
-              <span className="text-zinc-400 font-mono w-8">{pct}</span>
-              <span className="text-zinc-600 truncate">{desc}</span>
+        <button
+          onClick={() => setFormulaOpen((v) => !v)}
+          className="w-full flex items-center justify-between text-[10px] font-semibold text-zinc-600 uppercase tracking-wider hover:text-zinc-400 transition-colors"
+        >
+          <span>How ranking works</span>
+          <span>{formulaOpen ? "▴" : "▾"}</span>
+        </button>
+        {formulaOpen && (
+          <>
+            <div className="space-y-1 text-[10px] mt-2">
+              {[
+                { label: "Momentum",   pct: "35%", desc: "Upvotes/hour velocity",      color: "bg-violet-500" },
+                { label: "Recency",    pct: "25%", desc: "Time decay over 7 days",     color: "bg-blue-500" },
+                { label: "Engagement", pct: "30%", desc: "Score + comments (log1p)",   color: "bg-green-500" },
+                { label: "Quality",    pct: "10%", desc: "Technical depth heuristics", color: "bg-yellow-500" },
+              ].map(({ label, pct, desc, color }) => (
+                <div key={label} className="flex items-center gap-2">
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${color}`} />
+                  <span className="text-zinc-300 w-16">{label}</span>
+                  <span className="text-zinc-400 font-mono w-8">{pct}</span>
+                  <span className="text-zinc-600 truncate">{desc}</span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        <p className="text-[9px] text-zinc-700 mt-2 italic">
-          × subreddit tier weight (1.0–1.5×)
-        </p>
+            <p className="text-[9px] text-zinc-700 mt-2 italic">
+              × subreddit tier weight (1.0–1.5×)
+            </p>
+          </>
+        )}
       </div>
 
       {/* Community stats */}
