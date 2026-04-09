@@ -46,3 +46,21 @@ export function ScoreBreakdown({ scores }: ScoreBreakdownProps) {
     </div>
   );
 }
+
+/**
+ * Honest breakdown for RSS fallback posts.
+ * - Relabels inputs to reflect what they actually measure
+ * - Omits Engagement (structurally 0 from RSS — would be misleading)
+ */
+export function ScoreBreakdownFallback({ scores }: ScoreBreakdownProps) {
+  return (
+    <div className="space-y-1.5 py-2">
+      <ScoreBar label="Position"  score={scores.momentum} />
+      <ScoreBar label="Freshness" score={scores.recency} />
+      <ScoreBar label="Keywords"  score={scores.quality} />
+      <div className="border-t border-zinc-700/50 pt-1.5 mt-1">
+        <ScoreBar label="Signal"  score={scores.final} />
+      </div>
+    </div>
+  );
+}
