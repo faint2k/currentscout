@@ -120,6 +120,14 @@ export function PostCardFull({ post, rank, onOpen, compact = false }: PostCardFu
             )}
           </div>
 
+          {/* Top comment preview */}
+          {post.topComment && (
+            <p className="mt-1.5 text-[11px] text-zinc-600 leading-snug line-clamp-2">
+              <span className="text-zinc-700 font-medium">Top comment: </span>
+              {post.topComment}
+            </p>
+          )}
+
           {/* Badges + weighted score */}
           {!compact && (
             <div className="flex items-center gap-2 mt-2">

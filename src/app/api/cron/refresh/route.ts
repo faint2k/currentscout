@@ -13,6 +13,7 @@ import { fetchMultipleSubreddits, fetchSubredditPosts } from "../../../../lib/re
 import { fetchMultipleSubredditsRSS, fetchSubredditRSS } from "../../../../lib/reddit/rss";
 import { rankPosts, rankPostsFallback } from "../../../../lib/ranking/scorer";
 import { fetchHNPosts } from "../../../../lib/hackernews/fetcher";
+import { enrichWithTopComments } from "../../../../lib/reddit/comments";
 import { cache } from "../../../../lib/cache/store";
 import { SUBREDDIT_NAMES } from "../../../../lib/utils/subreddits";
 import type { RankedPost, RedditPost } from "../../../../lib/reddit/types";
@@ -91,6 +92,9 @@ export async function GET(req: NextRequest) {
         merged.push(post);
       }
       const ranked = merged.sort((a, b) => b.scores.final - a.scores.final);
+
+      // Enrich top 20 RSS posts with real top comment (fetched from public JSON)
+      await enrichWithTopComments(ranked, 20);
 
       await cache.set(OVERVIEW_KEY, ranked, CACHE_TTL_MS);
       results["overview"] = ranked.length;

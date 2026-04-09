@@ -69,6 +69,11 @@ export interface RankedPost extends RedditPost {
    *   "api" → Reddit OAuth API: fully real data.
    */
   dataSource:      "rss" | "hn" | "api";
+  /**
+   * Top-scored comment body, fetched at cron time from Reddit's public
+   * comment JSON. Optional — only set when successfully retrieved.
+   */
+  topComment?:     string;
 }
 
 // ─── Feed / filter types ──────────────────────────────────────────────────────
