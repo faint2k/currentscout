@@ -13,6 +13,14 @@ interface PostCardFallbackProps {
   compact?: boolean;
 }
 
+/** Returns a Tailwind border-left color class based on the post's final score */
+function scoreStripe(score: number): string {
+  if (score >= 80) return "border-l-violet-500";
+  if (score >= 60) return "border-l-blue-500";
+  if (score >= 40) return "border-l-zinc-600";
+  return "border-l-zinc-800/40";
+}
+
 // Only "Rising" is reliable from RSS — it fires on recency + feed position,
 // both of which we actually have. The rest (Trending, Hot, High Signal, Deep Dive)
 // require real engagement data and are suppressed.
@@ -44,7 +52,7 @@ export function PostCardFallback({ post, rank, onOpen, compact = false }: PostCa
 
   return (
     <article
-      className={`group relative bg-zinc-900 border border-zinc-800/70 rounded-lg hover:border-zinc-700/80 transition-all duration-150 ${
+      className={`group relative bg-zinc-900 border border-zinc-800/70 border-l-[3px] ${scoreStripe(post.scores.final)} rounded-lg hover:border-zinc-700/80 transition-all duration-150 ${
         compact ? "px-3 py-2.5" : "px-4 py-3"
       }`}
     >
@@ -101,14 +109,6 @@ export function PostCardFallback({ post, rank, onOpen, compact = false }: PostCa
               </>
             )}
 
-            {/* RSS provenance indicator — always shown */}
-            <span className="text-zinc-600">·</span>
-            <span
-              className="text-[9px] text-zinc-600 font-mono border border-zinc-800 rounded px-1 py-0.5 leading-none"
-              title="Scores estimated from RSS feed position — real upvote data unavailable"
-            >
-              RSS est.
-            </span>
           </div>
 
           {/* Top comment preview */}
@@ -116,6 +116,13 @@ export function PostCardFallback({ post, rank, onOpen, compact = false }: PostCa
             <p className="mt-1.5 text-[11px] text-zinc-600 leading-snug line-clamp-2">
               <span className="text-zinc-700 font-medium">Top comment: </span>
               {post.topComment}
+            </p>
+          )}
+
+          {/* Selftext preview — only when no topComment and post has self text */}
+          {!post.topComment && post.is_self && post.selftext && post.selftext.length > 10 && (
+            <p className="text-[11px] text-zinc-600 leading-snug mt-1.5 line-clamp-2">
+              {post.selftext.slice(0, 130).replace(/\s+\S*$/, "") + "…"}
             </p>
           )}
 

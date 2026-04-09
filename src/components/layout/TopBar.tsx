@@ -2,13 +2,12 @@
 
 import React, { useState, useCallback } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useFeedStore } from "../../stores/feedStore";
 import { MobileNav } from "./MobileNav";
 
 export function TopBar() {
   const pathname = usePathname();
-  const router   = useRouter();
   const { filters, setFilters } = useFeedStore();
   const [search, setSearch] = useState(filters.search);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -87,33 +86,6 @@ export function TopBar() {
           </div>
         </form>
 
-        {/* Sort quick-select */}
-        <select
-          value={filters.sort}
-          onChange={(e) => setFilters({ sort: e.target.value as typeof filters.sort })}
-          className="bg-zinc-800 border border-zinc-700/50 text-zinc-300 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-violet-600/60 hidden md:block"
-        >
-          <option value="weighted">Best</option>
-          <option value="trending">Trending</option>
-          <option value="hot">Hot</option>
-          <option value="new">New</option>
-          <option value="top">Top</option>
-        </select>
-
-        {/* Time filter quick-select */}
-        <select
-          value={filters.time}
-          onChange={(e) => setFilters({ time: e.target.value as typeof filters.time })}
-          className="bg-zinc-800 border border-zinc-700/50 text-zinc-300 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-violet-600/60 hidden md:block"
-        >
-          <option value="1h">1h</option>
-          <option value="4h">4h</option>
-          <option value="12h">12h</option>
-          <option value="24h">24h</option>
-          <option value="3d">3d</option>
-          <option value="7d">7d</option>
-          <option value="all">All</option>
-        </select>
       </div>
 
       {/* Mobile filter strip — visible below md */}

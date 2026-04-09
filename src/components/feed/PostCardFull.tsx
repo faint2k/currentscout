@@ -13,6 +13,14 @@ interface PostCardFullProps {
   compact?: boolean;
 }
 
+/** Returns a Tailwind border-left color class based on the post's final score */
+function scoreStripe(score: number): string {
+  if (score >= 80) return "border-l-violet-500";
+  if (score >= 60) return "border-l-blue-500";
+  if (score >= 40) return "border-l-zinc-600";
+  return "border-l-zinc-800/40";
+}
+
 /** PostCard for posts with real data — Reddit OAuth API or Hacker News */
 export function PostCardFull({ post, rank, onOpen, compact = false }: PostCardFullProps) {
   const [scoreOpen, setScoreOpen] = useState(false);
@@ -24,7 +32,7 @@ export function PostCardFull({ post, rank, onOpen, compact = false }: PostCardFu
 
   return (
     <article
-      className={`group relative bg-zinc-900 border border-zinc-800/70 rounded-lg hover:border-zinc-700/80 transition-all duration-150 ${
+      className={`group relative bg-zinc-900 border border-zinc-800/70 border-l-[3px] ${scoreStripe(post.scores.final)} rounded-lg hover:border-zinc-700/80 transition-all duration-150 ${
         compact ? "px-3 py-2.5" : "px-4 py-3"
       }`}
     >
@@ -125,6 +133,13 @@ export function PostCardFull({ post, rank, onOpen, compact = false }: PostCardFu
             <p className="mt-1.5 text-[11px] text-zinc-600 leading-snug line-clamp-2">
               <span className="text-zinc-700 font-medium">Top comment: </span>
               {post.topComment}
+            </p>
+          )}
+
+          {/* Selftext preview — only when no topComment and post has self text */}
+          {!post.topComment && post.is_self && post.selftext && post.selftext.length > 10 && (
+            <p className="text-[11px] text-zinc-600 leading-snug mt-1.5 line-clamp-2">
+              {post.selftext.slice(0, 130).replace(/\s+\S*$/, "") + "…"}
             </p>
           )}
 
