@@ -1,0 +1,34 @@
+name: Refresh Reddit Feed
+
+on:
+  schedule:
+    # Every 15 minutes — triggers Vercel to fetch via RSS and refresh Redis cache
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    name: Refresh feed cache
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Trigger feed refresh
+        run: |
+          RESPONSE=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            -X GET \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/refresh")
+
+          echo "HTTP status: $RESPONSE"
+          echo "Response body:"
+          cat /tmp/response.json
+
+          if [ "$RESPONSE" != "200" ]; then
+            echo "Refresh endpoint returned $RESPONSE — failing job"
+            exit 1
+          fi
+
+          TOTAL=$(cat /tmp/response.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('total_posts', 'n/a'))")
+          ELAPSED=$(cat /tmp/response.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('elapsed_ms', 'n/a'))")
+          echo "Posts refreshed: $TOTAL in ${ELAPSED}ms"
