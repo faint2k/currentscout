@@ -36,6 +36,21 @@ export async function fetchOverviewFeed(
   // 2. Cold-start: Redis empty — try JSON API then RSS, write result to Redis
   console.warn("[fetcher] Redis cold start — fetching directly (one-time)");
 
+  // Restore membership snapshot if available (populated by cron)
+  try {
+    const { importSnapshot, initStaticFallbacks } = await import("../utils/membershipStore");
+    const { SUBREDDITS } = await import("../utils/subreddits");
+    initStaticFallbacks(SUBREDDITS);
+
+    const memberSnapshot = await cache.get<Record<string, import("../utils/membershipStore").SubredditMembership>>("membership:snapshot");
+    if (memberSnapshot) {
+      importSnapshot(memberSnapshot.value);
+      console.log("[fetcher] Loaded membership snapshot from cache");
+    }
+  } catch {
+    // Non-fatal — static fallbacks remain active
+  }
+
   // FORCE_RSS_MODE=true in .env.local bypasses the public JSON API so that
   // local dev previews reflect the same RankPostFallback/RSS path that runs
   // on Vercel (where Reddit blocks datacenter IPs and JSON API returns nothing).

@@ -74,6 +74,12 @@ export interface RankedPost extends RedditPost {
    * comment JSON. Optional — only set when successfully retrieved.
    */
   topComment?:     string;
+  /**
+   * Membership provenance string for debug display.
+   * Format: "live:2.1M" | "static:1.5M" | "none:0"
+   * Only populated when NEXT_PUBLIC_SHOW_MEMBERSHIP_DEBUG=true or NODE_ENV=development.
+   */
+  membershipSource?: string;
 }
 
 // ─── Feed / filter types ──────────────────────────────────────────────────────

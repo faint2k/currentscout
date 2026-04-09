@@ -107,6 +107,24 @@ export async function GET(req: NextRequest) {
       console.warn("[cron] Overview: 0 posts fetched — Redis not updated");
     }
 
+    // ── 1b. Membership refresh (non-blocking) ────────────────────────────────
+    // Runs after Reddit fetch, before per-subreddit loop.
+    // If blocked (Vercel datacenter IP), static fallbacks remain in scorer.
+    try {
+      const { fetchMemberCounts }    = await import("../../../../lib/reddit/membershipFetcher");
+      const { bulkUpdateMemberships, exportSnapshot } = await import("../../../../lib/utils/membershipStore");
+
+      const memberUpdates = await fetchMemberCounts(SUBREDDIT_NAMES, { batchSize: 5, pauseMs: 400 });
+      bulkUpdateMemberships(memberUpdates.map((m) => ({ name: m.name, memberCount: m.subscribers })));
+
+      // Persist snapshot to Redis so it survives server restarts
+      const snapshot = exportSnapshot();
+      await cache.set("membership:snapshot", snapshot, 24 * 60 * 60 * 1000); // 24h TTL
+      console.log(`[cron] Updated membership counts for ${memberUpdates.length} subreddits`);
+    } catch (err) {
+      console.warn("[cron] Membership refresh failed (non-fatal):", err);
+    }
+
     // ── 2. Per-subreddit feeds (top 15) ──────────────────────────────────────
     const PRIORITY_SUBS = SUBREDDIT_NAMES.slice(0, 15);
     const BATCH_SIZE    = 3;
