@@ -36,12 +36,20 @@ export async function fetchOverviewFeed(
   // 2. Cold-start: Redis empty — try JSON API then RSS, write result to Redis
   console.warn("[fetcher] Redis cold start — fetching directly (one-time)");
 
-  let raw = await fetchMultipleSubreddits(subreddits, { sort: "hot", limit: 25 });
-  let isRSS = false;
+  // FORCE_RSS_MODE=true in .env.local bypasses the public JSON API so that
+  // local dev previews reflect the same RankPostFallback/RSS path that runs
+  // on Vercel (where Reddit blocks datacenter IPs and JSON API returns nothing).
+  const forceRSS = process.env.FORCE_RSS_MODE === "true";
 
-  // JSON API blocked? Fall back to RSS
+  let raw = forceRSS
+    ? []
+    : await fetchMultipleSubreddits(subreddits, { sort: "hot", limit: 25 });
+  let isRSS = forceRSS;
+
+  // JSON API blocked (or forced off)? Fall back to RSS
   if (raw.length === 0) {
-    console.warn("[fetcher] JSON API failed — using RSS fallback (limited data)");
+    if (!forceRSS) console.warn("[fetcher] JSON API failed — using RSS fallback (limited data)");
+    else           console.warn("[fetcher] FORCE_RSS_MODE=true — using RSS path directly");
     raw    = await fetchMultipleSubredditsRSS(subreddits, "hot", 25);
     isRSS  = true;
   }

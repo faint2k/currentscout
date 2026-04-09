@@ -25,7 +25,7 @@ export function StatsPanel() {
           <h2 className="text-xs font-semibold text-zinc-200">CurrentScout</h2>
         </div>
         <p className="text-[11px] text-zinc-500 leading-relaxed">
-          The AI internet, distilled. Ranked signal from the communities where AI actually happens — scored by momentum, engagement, and source weight.
+          Ranked signal from 44 AI communities. Scored by recency, feed position, title quality, and community weight. Updated every 15 minutes.
         </p>
       </div>
 
@@ -42,10 +42,10 @@ export function StatsPanel() {
           <>
             <div className="space-y-1 text-[10px] mt-2">
               {[
-                { label: "Momentum",   pct: "35%", desc: "Upvotes/hour velocity",      color: "bg-violet-500" },
-                { label: "Recency",    pct: "25%", desc: "Time decay over 7 days",     color: "bg-blue-500" },
-                { label: "Engagement", pct: "30%", desc: "Score + comments (log1p)",   color: "bg-green-500" },
-                { label: "Quality",    pct: "10%", desc: "Technical depth heuristics", color: "bg-yellow-500" },
+                { label: "Position",  pct: "35%", desc: "Feed position × community size", color: "bg-violet-500" },
+                { label: "Freshness", pct: "25%", desc: "Time decay over 48 hours",       color: "bg-blue-500" },
+                { label: "Engagement",pct: "30%", desc: "Score + comments when available",color: "bg-green-500" },
+                { label: "Quality",   pct: "10%", desc: "Title depth heuristics",         color: "bg-yellow-500" },
               ].map(({ label, pct, desc, color }) => (
                 <div key={label} className="flex items-center gap-2">
                   <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${color}`} />
@@ -96,16 +96,6 @@ export function StatsPanel() {
         </div>
       </div>
 
-      {/* Data source */}
-      <div className="bg-zinc-900 border border-zinc-800/70 rounded-lg p-3">
-        <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-wider mb-1.5">
-          Data Source
-        </p>
-        <p className="text-[10px] text-zinc-500 leading-relaxed">
-          Reddit public JSON API (free, no auth required). Hot + rising
-          feeds fetched per subreddit. All data is read-only.
-        </p>
-      </div>
     </div>
   );
 }

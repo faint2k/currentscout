@@ -29,12 +29,6 @@ function applySortClient(posts: RankedPost[], sort: SortMode): RankedPost[] {
   });
 }
 
-function getTimeGroup(hoursOld: number): string {
-  if (hoursOld <= 1)  return "Last hour";
-  if (hoursOld <= 4)  return "Last 4 hours";
-  if (hoursOld <= 24) return "Last 24 hours";
-  return "Older";
-}
 
 export function PostList({
   posts,
@@ -141,46 +135,19 @@ export function PostList({
   const hasMore  = visible < filtered.length;
   const remaining = filtered.length - visible;
 
-  // Build the rendered list with time-group dividers
-  // Only show dividers when time filter is not "1h" (only one group would be visible)
-  const showDividers = filters.time !== "1h";
-  const items: React.ReactNode[] = [];
-  let lastGroup: string | null = null;
-
-  shown.forEach((post, i) => {
-    const group = getTimeGroup(post.hoursOld);
-    if (showDividers && group !== lastGroup) {
-      if (lastGroup !== null) {
-        // Insert divider between groups (not before the first group)
-        items.push(
-          <div
-            key={`divider-${group}`}
-            className="text-[10px] font-semibold text-zinc-700 uppercase tracking-wider py-2 px-1 flex items-center gap-2"
-          >
-            <span>{group}</span>
-            <span className="flex-1 h-px bg-zinc-800/60" />
-          </div>
-        );
-      }
-      lastGroup = group;
-    }
-
-    items.push(
-      <PostCard
-        key={post.id}
-        post={post}
-        rank={showRank ? i + 1 : undefined}
-        onOpen={setSelected}
-        compact={compact}
-        active={activeIndex === i}
-      />
-    );
-  });
-
   return (
     <>
       <div className="space-y-2">
-        {items}
+        {shown.map((post, i) => (
+          <PostCard
+            key={post.id}
+            post={post}
+            rank={showRank ? i + 1 : undefined}
+            onOpen={setSelected}
+            compact={compact}
+            active={activeIndex === i}
+          />
+        ))}
       </div>
 
       {/* Load more — auto-triggered by scroll, also manually clickable */}
