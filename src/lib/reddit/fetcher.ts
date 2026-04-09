@@ -13,11 +13,10 @@
 import { fetchMultipleSubreddits, fetchSubredditPosts } from "./client";
 import { fetchMultipleSubredditsRSS, fetchSubredditRSS } from "./rss";
 import { rankPosts, rankPostsFallback } from "../ranking/scorer";
-import { fetchHNPosts } from "../hackernews/fetcher";
 import { cache } from "../cache/store";
 import { SUBREDDIT_NAMES } from "../utils/subreddits";
 import { getMockPosts } from "../../data/mock";
-import type { RankedPost, RedditPost } from "./types";
+import type { RankedPost } from "./types";
 
 const CACHE_TTL_MS  = 20 * 60 * 1000; // 20 min — outlasts 15-min cron cycle
 const OVERVIEW_KEY  = (subs: string[]) => `overview:${[...subs].sort().join(",")}`;
@@ -66,23 +65,9 @@ export async function fetchOverviewFeed(
   const seen = new Set<string>();
   raw = raw.filter((p) => { if (seen.has(p.id)) return false; seen.add(p.id); return true; });
 
-  // HN runs in parallel and always uses rankPosts (real data)
-  const hnRaw = await fetchHNPosts();
-
-  const redditRanked = isRSS ? rankPostsFallback(raw) : rankPosts(raw);
-  const hnRanked     = rankPosts(hnRaw);
-
-  // Merge, dedup by url (same story may appear on both HN and Reddit)
-  const seenUrls = new Set<string>();
-  const merged: RankedPost[] = [];
-  for (const post of [...redditRanked, ...hnRanked]) {
-    const key = post.source === "hn" ? post.url : post.id;
-    if (seenUrls.has(key)) continue;
-    seenUrls.add(key);
-    merged.push(post);
-  }
-  const ranked = merged.sort((a, b) => b.scores.final - a.scores.final);
-
+  // Cold-start: Reddit only — HN is fetched by the cron job, not here.
+  // Fetching HN in a user-facing request would blow the function timeout.
+  const ranked = isRSS ? rankPostsFallback(raw) : rankPosts(raw);
   await cache.set(OVERVIEW_KEY(subreddits), ranked, CACHE_TTL_MS);
 
   return { posts: ranked, cached: false, fetchedAt: Date.now(), sources: subreddits };

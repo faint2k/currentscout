@@ -10,7 +10,14 @@
       "WebFetch(domain:support.reddithelp.com)",
       "WebFetch(domain:replydaddy.com)",
       "WebFetch(domain:molehill.io)",
-      "WebFetch(domain:techcrunch.com)"
+      "WebFetch(domain:techcrunch.com)",
+      "WebFetch(domain:publish.reddit.com)",
+      "WebFetch(domain:www.socialmediatoday.com)",
+      "WebFetch(domain:almcorp.com)",
+      "WebFetch(domain:ads.reddit.com)",
+      "WebFetch(domain:redditforbusiness.com)",
+      "WebFetch(domain:www.business.reddit.com)",
+      "WebFetch(domain:searchengineland.com)"
     ]
   }
 }
