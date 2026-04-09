@@ -62,6 +62,13 @@ export interface RankedPost extends RedditPost {
   scores:          PostScores;
   subredditWeight: number;
   badges:          SignalBadge[];
+  /**
+   * Data provenance — drives which PostCard UI is rendered.
+   *   "rss" → RSS fallback: scores are estimated, counts are fake/zero.
+   *   "hn"  → Hacker News API: real points, real comments.
+   *   "api" → Reddit OAuth API: fully real data.
+   */
+  dataSource:      "rss" | "hn" | "api";
 }
 
 // ─── Feed / filter types ──────────────────────────────────────────────────────

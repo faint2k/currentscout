@@ -185,6 +185,7 @@ export function rankPost(post: RedditPost): RankedPost {
     scores: { momentum, recency, engagement, quality, final: finalScore },
     subredditWeight: subWeight,
     badges,
+    dataSource: post.source === "hn" ? "hn" : "api",
   };
 }
 
@@ -313,6 +314,7 @@ export function rankPostsFallback(posts: RedditPost[]): RankedPost[] {
       },
       subredditWeight: subWeight,
       badges,
+      dataSource: "rss" as const,
     } as RankedPost;
   });
 
