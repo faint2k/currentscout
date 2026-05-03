@@ -5,10 +5,10 @@ import Link from "next/link";
 import { SUBREDDITS, CATEGORIES } from "../../lib/utils/subreddits";
 
 const TIER_COLOR = {
-  1: "text-violet-400",
-  2: "text-blue-400",
-  3: "text-zinc-400",
-  4: "text-zinc-500",
+  1: "text-violet-300",
+  2: "text-blue-300",
+  3: "text-zinc-300",
+  4: "text-zinc-400",
 } as const;
 
 export function StatsPanel() {
@@ -16,86 +16,108 @@ export function StatsPanel() {
 
   return (
     <div className="space-y-4">
-      {/* About */}
-      <div className="bg-zinc-900 border border-zinc-800/70 rounded-lg p-3">
-        <div className="flex items-center gap-2 mb-2">
-          <div className="w-6 h-6 rounded-md bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white font-bold text-xs shrink-0">
+      <div className="rounded-2xl border border-zinc-800/70 bg-zinc-900/70 p-4 shadow-[0_1px_0_rgba(255,255,255,0.02)]">
+        <div className="mb-3 flex items-center gap-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 text-xs font-bold text-white">
             C
           </div>
-          <h2 className="text-xs font-semibold text-zinc-200">CurrentScout</h2>
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-100">CurrentScout</h2>
+            <p className="text-[11px] text-zinc-500">Ranked signal from 44 AI communities</p>
+          </div>
         </div>
-        <p className="text-[11px] text-zinc-500 leading-relaxed">
-          Ranked signal from 44 AI communities. Scored by recency, feed position, title quality, and community weight. Updated every 15 minutes.
+        <p className="text-[13px] leading-relaxed text-zinc-300">
+          A feed for practitioners who want to find what’s moving through AI communities quickly,
+          without drowning in generic noise.
         </p>
       </div>
 
-      {/* Score formula — collapsible */}
-      <div className="bg-zinc-900 border border-zinc-800/70 rounded-lg p-3">
+      <div className="rounded-2xl border border-amber-500/20 bg-amber-500/8 p-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-100/90">
+          Data quality status
+        </p>
+        <p className="mt-2 text-[13px] leading-relaxed text-zinc-300">
+          Some rankings are currently estimated from feed position, freshness, title quality, and
+          community weight while Reddit API access is pending.
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-zinc-800/70 bg-zinc-900/70 p-4">
         <button
           onClick={() => setFormulaOpen((v) => !v)}
-          className="w-full flex items-center justify-between text-[10px] font-semibold text-zinc-600 uppercase tracking-wider hover:text-zinc-400 transition-colors"
+          className="flex w-full items-center justify-between text-left"
         >
-          <span>How ranking works</span>
-          <span>{formulaOpen ? "▴" : "▾"}</span>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
+              How ranking works
+            </p>
+            <p className="mt-1 text-xs text-zinc-500">What influences the estimated signal score</p>
+          </div>
+          <span className="text-sm text-zinc-500">{formulaOpen ? "▴" : "▾"}</span>
         </button>
+
         {formulaOpen && (
           <>
-            <div className="space-y-1 text-[10px] mt-2">
+            <div className="mt-3 space-y-2 text-xs">
               {[
-                { label: "Position",  pct: "35%", desc: "Feed position × community size", color: "bg-violet-500" },
-                { label: "Freshness", pct: "25%", desc: "Time decay over 48 hours",       color: "bg-blue-500" },
-                { label: "Engagement",pct: "30%", desc: "Score + comments when available",color: "bg-green-500" },
-                { label: "Quality",   pct: "10%", desc: "Title depth heuristics",         color: "bg-yellow-500" },
+                { label: "Position", pct: "35%", desc: "Feed position adjusted by community weight", color: "bg-violet-500" },
+                { label: "Freshness", pct: "25%", desc: "Recency decay over roughly 48 hours", color: "bg-blue-500" },
+                { label: "Engagement", pct: "30%", desc: "Score + comments when the data is available", color: "bg-emerald-500" },
+                { label: "Quality", pct: "10%", desc: "Title depth and practitioner signal heuristics", color: "bg-amber-500" },
               ].map(({ label, pct, desc, color }) => (
-                <div key={label} className="flex items-center gap-2">
-                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${color}`} />
-                  <span className="text-zinc-300 w-16">{label}</span>
-                  <span className="text-zinc-400 font-mono w-8">{pct}</span>
-                  <span className="text-zinc-600 truncate">{desc}</span>
+                <div key={label} className="flex items-start gap-2 rounded-xl border border-zinc-800/70 bg-zinc-950/70 px-3 py-2">
+                  <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${color}`} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-zinc-100">{label}</span>
+                      <span className="font-mono text-zinc-400">{pct}</span>
+                    </div>
+                    <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">{desc}</p>
+                  </div>
                 </div>
               ))}
             </div>
-            <p className="text-[9px] text-zinc-700 mt-2 italic">
-              × subreddit tier weight (1.0–1.5×)
+            <p className="mt-3 text-[11px] leading-relaxed text-zinc-500">
+              Tier weighting multiplies the total score by roughly 1.0–1.5× based on community importance.
             </p>
           </>
         )}
       </div>
 
-      {/* Community stats */}
-      <div className="bg-zinc-900 border border-zinc-800/70 rounded-lg p-3">
-        <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-wider mb-2">
-          Communities
+      <div className="rounded-2xl border border-zinc-800/70 bg-zinc-900/70 p-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
+          Coverage
         </p>
-        <div className="grid grid-cols-2 gap-1 text-[10px] mb-2">
-          <div className="text-zinc-400">Tracked</div>
-          <div className="text-zinc-200 font-medium text-right">{SUBREDDITS.length} subreddits</div>
-          <div className="text-zinc-400">Categories</div>
-          <div className="text-zinc-200 font-medium text-right">{CATEGORIES.length}</div>
-          <div className="text-zinc-400">Cache TTL</div>
-          <div className="text-zinc-200 font-medium text-right">15 min</div>
+        <div className="mt-3 grid grid-cols-2 gap-y-2 text-sm">
+          <div className="text-zinc-500">Tracked communities</div>
+          <div className="text-right font-medium text-zinc-100">{SUBREDDITS.length}</div>
+          <div className="text-zinc-500">Categories</div>
+          <div className="text-right font-medium text-zinc-100">{CATEGORIES.length}</div>
+          <div className="text-zinc-500">Refresh cadence</div>
+          <div className="text-right font-medium text-zinc-100">15 min</div>
         </div>
       </div>
 
-      {/* Top communities by tier */}
-      <div className="bg-zinc-900 border border-zinc-800/70 rounded-lg p-3">
-        <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-wider mb-2">
-          Tier 1 Communities
+      <div className="rounded-2xl border border-zinc-800/70 bg-zinc-900/70 p-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
+          Tier 1 communities
         </p>
-        <div className="space-y-0.5">
+        <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
+          Highest-weight communities in the CurrentScout ranking model.
+        </p>
+        <div className="mt-3 space-y-1.5">
           {SUBREDDITS.filter((s) => s.tier === 1).map((sub) => (
             <Link
               key={sub.name}
               href={`/r/${sub.name}`}
-              className="flex items-center justify-between py-0.5 text-[11px] hover:text-zinc-200 transition-colors"
+              className="flex items-center justify-between rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-zinc-950 hover:text-zinc-100"
             >
-              <span className={`${TIER_COLOR[sub.tier]}`}>r/{sub.name}</span>
-              <span className="text-zinc-600">{sub.weight.toFixed(2)}×</span>
+              <span className={TIER_COLOR[sub.tier]}>r/{sub.name}</span>
+              <span className="font-mono text-xs text-zinc-500">{sub.weight.toFixed(2)}×</span>
             </Link>
           ))}
         </div>
       </div>
-
     </div>
   );
 }
