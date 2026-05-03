@@ -29,6 +29,9 @@ export function TopBar() {
   const pathname = usePathname();
   const { filters, setFilters } = useFeedStore();
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
+  const currentSubreddit = pathname.startsWith("/r/")
+    ? decodeURIComponent(pathname.replace("/r/", "").split("/")[0] || "")
+    : null;
 
   const navLinks = [
     { href: "/", label: "Overview" },
@@ -91,26 +94,51 @@ export function TopBar() {
             })}
           </nav>
 
-          <div className="ml-auto flex min-w-0 items-center gap-2">
-            <button
-              onClick={() => setMobileNavOpen(true)}
-              className="flex min-w-0 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-900/90 lg:hidden"
-              aria-label="Open mobile filters"
+          {currentSubreddit && (
+            <Link
+              href="/"
+              className="hidden items-center gap-2 rounded-xl border border-violet-500/25 bg-violet-500/10 px-3 py-2 text-xs font-medium text-violet-100 transition-colors hover:border-violet-400/40 hover:bg-violet-500/14 lg:flex"
+              aria-label="Return to the main CurrentScout feed"
             >
-              <div className="min-w-0">
-                <div className="truncate text-[11px] font-medium text-zinc-100">
-                  {SORT_LABELS[filters.sort]} · {TIME_LABELS[filters.time]}
+              <span aria-hidden="true">←</span>
+              <span>Back to CurrentScout</span>
+              <span className="text-violet-200/70">r/{currentSubreddit}</span>
+            </Link>
+          )}
+
+          <div className="ml-auto flex min-w-0 items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2 lg:hidden">
+              {currentSubreddit && (
+                <Link
+                  href="/"
+                  className="flex items-center gap-1.5 rounded-xl border border-violet-500/25 bg-violet-500/10 px-2.5 py-2 text-[11px] font-medium text-violet-100 transition-colors hover:border-violet-400/40 hover:bg-violet-500/14"
+                  aria-label="Back to the main CurrentScout feed"
+                >
+                  <span aria-hidden="true">←</span>
+                  <span>Feed</span>
+                </Link>
+              )}
+
+              <button
+                onClick={() => setMobileNavOpen(true)}
+                className="flex min-w-0 items-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-900/90"
+                aria-label="Open mobile filters"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-[11px] font-medium text-zinc-100">
+                    {SORT_LABELS[filters.sort]} · {TIME_LABELS[filters.time]}
+                  </div>
+                  <div className="truncate text-[10px] text-zinc-500">
+                    {activeFilterCount > 0
+                      ? `${activeFilterCount} active filter${activeFilterCount === 1 ? "" : "s"}`
+                      : "Search, score, and communities"}
+                  </div>
                 </div>
-                <div className="truncate text-[10px] text-zinc-500">
-                  {activeFilterCount > 0
-                    ? `${activeFilterCount} active filter${activeFilterCount === 1 ? "" : "s"}`
-                    : "Search, score, and communities"}
-                </div>
-              </div>
-              <span className="shrink-0 rounded-full border border-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-400">
-                Filters
-              </span>
-            </button>
+                <span className="shrink-0 rounded-full border border-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-400">
+                  Filters
+                </span>
+              </button>
+            </div>
 
             <div className="hidden flex-1 max-w-lg md:block lg:min-w-[20rem]">
               <div className="relative">
