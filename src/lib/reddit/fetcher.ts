@@ -12,6 +12,7 @@
 
 import { fetchMultipleSubreddits, fetchSubredditPosts } from "./client";
 import { fetchMultipleSubredditsRSS, fetchSubredditRSS } from "./rss";
+import { enrichWithThreadContext } from "./comments";
 import { rankPosts, rankPostsFallback } from "../ranking/scorer";
 import { cache } from "../cache/store";
 import { SUBREDDIT_NAMES } from "../utils/subreddits";
@@ -90,7 +91,11 @@ export async function fetchOverviewFeed(
 
   // Cold-start: Reddit only — HN is fetched by the cron job, not here.
   // Fetching HN in a user-facing request would blow the function timeout.
-  const ranked = isRSS ? rankPostsFallback(raw) : rankPosts(raw);
+  let ranked = isRSS ? rankPostsFallback(raw) : rankPosts(raw);
+  if (isRSS) {
+    await enrichWithThreadContext(ranked, 12);
+    ranked = rankPostsFallback(ranked);
+  }
   await cache.set(OVERVIEW_KEY(subreddits), ranked, CACHE_TTL_MS);
 
   return { posts: ranked, cached: false, fetchedAt: Date.now(), sources: subreddits };
@@ -112,8 +117,12 @@ export async function fetchSubredditFeed(
 
   const fetchSorted = async (sort: "hot" | "rising" | "top", limit: number) => {
     const json = await fetchSubredditPosts(subreddit, { sort, limit, t: "day" });
-    if (json.length > 0) return json;
-    return fetchSubredditRSS(subreddit, sort === "top" ? "hot" : sort, limit);
+    if (json.length > 0) return { posts: json, source: "json" as const };
+
+    const rss = await fetchSubredditRSS(subreddit, sort === "top" ? "hot" : sort, limit);
+    if (rss.length > 0) return { posts: rss, source: "rss" as const };
+
+    return { posts: [] as RankedPost[], source: "empty" as const };
   };
 
   const [hot, risingPosts, top] = await Promise.all([
@@ -122,7 +131,7 @@ export async function fetchSubredditFeed(
     fetchSorted("top",    15),
   ]);
 
-  let raw = [...hot, ...risingPosts, ...top];
+  let raw = [...hot.posts, ...risingPosts.posts, ...top.posts];
 
   // 3. Mock fallback
   if (raw.length === 0) {
@@ -135,8 +144,14 @@ export async function fetchSubredditFeed(
   const seen = new Set<string>();
   raw = raw.filter((p) => { if (seen.has(p.id)) return false; seen.add(p.id); return true; });
 
-  const isRSSSub = hot.length === 0; // if hot came from RSS, all did
-  const ranked   = isRSSSub ? rankPostsFallback(raw) : rankPosts(raw);
+  const isRSSSub = hot.source !== "json" && risingPosts.source !== "json" && top.source !== "json";
+
+  let ranked = isRSSSub ? rankPostsFallback(raw) : rankPosts(raw);
+  if (isRSSSub) {
+    await enrichWithThreadContext(ranked, 12);
+    ranked = rankPostsFallback(ranked);
+  }
+
   await cache.set(SUB_KEY(subreddit), ranked, CACHE_TTL_MS);
 
   return { posts: ranked, cached: false, fetchedAt: Date.now() };

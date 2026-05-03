@@ -293,6 +293,7 @@ export function rankPostsFallback(posts: RedditPost[]): RankedPost[] {
 
   // Find max score in batch for relative position signal (max spread)
   const maxScore = Math.max(...posts.map((p) => p.score), 1);
+  const maxComments = Math.max(...posts.map((p) => p.num_comments || 0), 1);
 
   // Shorter recency window — 48h gives real spread between a 2h and 12h post
   const FALLBACK_RECENCY_WINDOW = 48;
@@ -306,43 +307,48 @@ export function rankPostsFallback(posts: RedditPost[]): RankedPost[] {
     // Recency: 48h window gives meaningful spread across the feed
     const recency = Math.max(0, (1 - hoursOld / FALLBACK_RECENCY_WINDOW) * 100);
 
+    // Discussion signal becomes available once we enrich RSS posts from thread JSON.
+    // Keep it logarithmic so a 300-comment monster does not totally swamp the feed.
+    const discussionSignal = maxComments > 0
+      ? Math.min(100, (Math.log1p(post.num_comments || 0) / Math.log1p(maxComments)) * 100)
+      : 0;
+
     // Subreddit tier weight — our most reliable quality signal
     const staticWeight = getSubredditWeight(post.subreddit);
     const subWeight    = membershipWeight(post.subreddit, staticWeight);
 
     // Junk penalty — megathreads, memes, nostalgia posts
     const junkMultiplier = isFallbackJunk(post.title) ? 0.4 : 1.0;
+    const quality = computeQuality(post.title, post.num_comments || 0, post.score, post.link_flair_text);
 
-    // "Best" (scores.final): absolute scale based on what we actually know.
-    // Normaliser 1900 calibrated so that:
-    //   ChatGPT pos-2 ≈ 95   — a genuinely strong post in the biggest community
-    //   StableDiffusion pos-0 ≈ 90  — top post, smaller community
-    //   LocalLLaMA pos-0 ≈ 86
-    //   deeplearning pos-0 ≈ 63
-    //   openrouter pos-0 ≈ 28
-    //   Real spread: ~20 (tiny sub, mid-feed) → 100 (top posts, massive subs).
-    const bestScore = Math.min(100, (post.score / 1900) * subWeight * junkMultiplier * 100);
+    // "Best" (scores.final): mostly score + subreddit weight, but now with a
+    // meaningful discussion bonus so enriched RSS posts with real comment
+    // activity surface above equally-scored low-discussion posts.
+    const bestBase = (post.score / 1900) * subWeight * 100;
+    const bestScore = Math.min(
+      100,
+      (bestBase + discussionSignal * 0.18 + quality * 0.08) * junkMultiplier,
+    );
 
-    // "Trending" (scores.momentum): feed position + freshness.
-    // subWeight intentionally excluded — trending velocity is about speed,
-    // not sub size (that's already captured in bestScore).
-    // Range: 0–100 naturally; no cap needed in practice.
-    const trendingScore = (0.55 * positionSignal + 0.45 * recency) * junkMultiplier;
+    // "Trending" (scores.momentum): position + freshness + discussion velocity.
+    const trendingScore = Math.min(
+      100,
+      (0.48 * positionSignal + 0.34 * recency + 0.18 * discussionSignal) * junkMultiplier,
+    );
 
     const badges: SignalBadge[] = [];
-    if (hoursOld < 3 && positionSignal >= 70) badges.push("Rising");
+    if (hoursOld < 3 && (positionSignal >= 70 || discussionSignal >= 55)) badges.push("Rising");
+    if ((post.num_comments || 0) >= 75 && !badges.includes("Hot")) badges.push("Hot");
 
     return {
       ...post,
       hoursOld,
       scores: {
-        momentum:   trendingScore,  // Trending tab sorts on this
+        momentum:   trendingScore,
         recency,
-        engagement: 0,
-        // Title-based quality works without comment data — keyword bonuses/penalties
-        // still fire. Comment-ratio bonus is 0 (no comments from RSS) which is honest.
-        quality:    computeQuality(post.title, 0, post.score, post.link_flair_text),
-        final:      bestScore,      // Best tab sorts on this
+        engagement: discussionSignal,
+        quality,
+        final:      bestScore,
       },
       subredditWeight: subWeight,
       badges,
