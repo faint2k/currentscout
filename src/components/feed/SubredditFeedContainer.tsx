@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { PostList } from "./PostList";
 import { FilterBar } from "../filters/FilterBar";
 import { SubredditChip } from "../ui/SubredditChip";
@@ -70,16 +71,32 @@ export function SubredditFeedContainer({ subreddit }: SubredditFeedContainerProp
 
   return (
     <div>
-      <div className="mb-4 flex items-center gap-3">
-        <SubredditChip name={subreddit} clickable={false} className="text-sm px-2 py-1" />
+      <div className="mb-4 rounded-2xl border border-zinc-800/70 bg-zinc-900/50 p-3">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/25 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-100 transition-colors hover:border-violet-400/40 hover:bg-violet-500/14"
+          >
+            <span aria-hidden="true">←</span>
+            <span>Back to CurrentScout</span>
+          </Link>
+
+          <SubredditChip name={subreddit} clickable={false} className="text-sm px-2 py-1" />
+
+          {config && (
+            <span className="rounded-full border border-zinc-700 bg-zinc-950/70 px-2.5 py-1 text-[10px] text-zinc-400">
+              {config.weight.toFixed(2)}× weight · Tier {config.tier}
+            </span>
+          )}
+        </div>
+
         {config && (
           <span className="text-xs text-zinc-500">{config.description}</span>
         )}
-        {config && (
-          <span className="ml-auto text-[10px] text-zinc-600">
-            {config.weight.toFixed(2)}× weight · Tier {config.tier}
-          </span>
-        )}
+
+        <p className="mt-2 text-[11px] text-zinc-500">
+          You’re viewing one community. Jump back to the full feed anytime.
+        </p>
       </div>
       <FilterBar totalPosts={posts.length} fetchedAt={fetchedAt} cached={cached} />
       <PostList posts={posts} showRank />
