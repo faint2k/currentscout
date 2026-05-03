@@ -13,7 +13,7 @@ import { fetchMultipleSubreddits, fetchSubredditPosts } from "../../../../lib/re
 import { fetchMultipleSubredditsRSS, fetchSubredditRSS } from "../../../../lib/reddit/rss";
 import { rankPosts, rankPostsFallback } from "../../../../lib/ranking/scorer";
 import { fetchHNPosts } from "../../../../lib/hackernews/fetcher";
-import { enrichWithTopComments } from "../../../../lib/reddit/comments";
+import { enrichWithThreadContext } from "../../../../lib/reddit/comments";
 import { cache } from "../../../../lib/cache/store";
 import { SUBREDDIT_NAMES } from "../../../../lib/utils/subreddits";
 import type { RankedPost, RedditPost } from "../../../../lib/reddit/types";
@@ -79,9 +79,16 @@ export async function GET(req: NextRequest) {
     const raw = dedup([...hot, ...rising]);
 
     if (raw.length > 0 || hnRaw.length > 0) {
-      const redditRanked = (hotSrc === "rss" && risingSrc !== "json")
+      const isRssOverview = hotSrc !== "json" && risingSrc !== "json";
+      let redditRanked = isRssOverview
         ? rankPostsFallback(raw)
         : rankPosts(raw);
+
+      if (isRssOverview) {
+        await enrichWithThreadContext(redditRanked, 20);
+        redditRanked = rankPostsFallback(redditRanked);
+      }
+
       const hnRanked = rankPosts(hnRaw);  // HN always has real data
 
       // Merge, dedup cross-source by url, sort by final score
@@ -95,8 +102,7 @@ export async function GET(req: NextRequest) {
       }
       const ranked = merged.sort((a, b) => b.scores.final - a.scores.final);
 
-      // Enrich top 20 RSS posts with real top comment (fetched from public JSON)
-      await enrichWithTopComments(ranked, 20);
+      await enrichWithThreadContext(ranked, 20);
 
       await cache.set(OVERVIEW_KEY, ranked, CACHE_TTL_MS);
       results["overview"] = ranked.length;
@@ -137,8 +143,12 @@ export async function GET(req: NextRequest) {
           try {
             const fetchSorted = async (sort: "hot" | "rising" | "top", limit: number) => {
               const json = await fetchSubredditPosts(sub, { sort, limit, t: "day" });
-              if (json.length > 0) return json;
-              return fetchSubredditRSS(sub, sort === "top" ? "hot" : sort, limit);
+              if (json.length > 0) return { posts: json, source: "json" as const };
+
+              const rss = await fetchSubredditRSS(sub, sort === "top" ? "hot" : sort, limit);
+              if (rss.length > 0) return { posts: rss, source: "rss" as const };
+
+              return { posts: [] as RedditPost[], source: "empty" as const };
             };
 
             const [hotSub, risingSub, topSub] = await Promise.all([
@@ -147,10 +157,17 @@ export async function GET(req: NextRequest) {
               fetchSorted("top",    15),
             ]);
 
-            const subRaw = dedup([...hotSub, ...risingSub, ...topSub]);
+            const subRaw = dedup([...hotSub.posts, ...risingSub.posts, ...topSub.posts]);
 
             if (subRaw.length > 0) {
-              const ranked = rankPosts(subRaw);
+              const isRssSub = hotSub.source !== "json" && risingSub.source !== "json" && topSub.source !== "json";
+              let ranked = isRssSub ? rankPostsFallback(subRaw) : rankPosts(subRaw);
+
+              if (isRssSub) {
+                await enrichWithThreadContext(ranked, 12);
+                ranked = rankPostsFallback(ranked);
+              }
+
               await cache.set(SUB_KEY(sub), ranked, CACHE_TTL_MS); // ← SDK
               results[sub]  = ranked.length;
               totalPosts   += ranked.length;
