@@ -19,8 +19,9 @@ import { SUBREDDIT_NAMES } from "../../../../lib/utils/subreddits";
 import type { RankedPost, RedditPost } from "../../../../lib/reddit/types";
 
 const CACHE_TTL_MS  = 20 * 60 * 1000;
-const OVERVIEW_KEY  = `overview:${[...SUBREDDIT_NAMES].sort().join(",")}`;
-const SUB_KEY       = (name: string) => `sub:${name.toLowerCase()}`;
+const CACHE_VERSION = "v4";
+const OVERVIEW_KEY  = `overview:${CACHE_VERSION}:${[...SUBREDDIT_NAMES].sort().join(",")}`;
+const SUB_KEY       = (name: string) => `sub:${CACHE_VERSION}:${name.toLowerCase()}`;
 
 /** Try JSON API first, fall back to RSS if it returns nothing */
 async function fetchWithFallback(
