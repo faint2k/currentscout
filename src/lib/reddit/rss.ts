@@ -42,17 +42,51 @@ function decodeXmlEntities(str: string): string {
     .replace(/<[^>]+>/g, ""); // strip any remaining HTML tags from title
 }
 
-/** Parse comment count from Reddit's content HTML, e.g. "[42 comments]" */
+function stripHtml(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+\n/g, "\n")
+    .replace(/\n\s+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+/** Parse comment count from legacy Reddit content HTML, e.g. "[42 comments]" */
 function parseCommentCount(contentHtml: string): number {
   const m = contentHtml.match(/\[(\d+)\s+comments?\]/i);
   return m ? parseInt(m[1], 10) : 0;
 }
 
 /** Extract the external URL from a link post's content HTML */
-function parseExternalUrl(contentHtml: string, permalink: string): string {
-  // Link posts include an <a href="..."> to the external URL in their content
-  const links = [...contentHtml.matchAll(/href="(https?:\/\/(?!www\.reddit\.com)[^"]+)"/gi)];
-  return links[0]?.[1] ?? `https://www.reddit.com${permalink}`;
+function parseExternalUrl(contentHtml: string): string | null {
+  const explicitLink = contentHtml.match(/<span>\s*<a href="([^"]+)">\[link\]<\/a><\/span>/i)?.[1];
+  if (explicitLink && !/https?:\/\/www\.reddit\.com\//i.test(explicitLink)) {
+    return decodeXmlEntities(explicitLink);
+  }
+
+  const bodyLink = contentHtml.match(/<div class="md">[\s\S]*?<a href="([^"]+)">/i)?.[1];
+  if (bodyLink && !/https?:\/\/www\.reddit\.com\//i.test(bodyLink)) {
+    return decodeXmlEntities(bodyLink);
+  }
+
+  return null;
+}
+
+function parseBodyText(contentHtml: string): string {
+  const divMatch = contentHtml.match(/<div class="md">([\s\S]*?)<\/div>/i);
+  if (!divMatch) return "";
+  return stripHtml(divMatch[1]);
+}
+
+function parseThumbnailUrl(entryXml: string, contentHtml: string): string | null {
+  const mediaThumb = extractAttr(entryXml, "media:thumbnail", "url");
+  if (mediaThumb) return decodeXmlEntities(mediaThumb);
+
+  const imgMatch = contentHtml.match(/<img[^>]+src="([^"]+)"/i);
+  return imgMatch ? decodeXmlEntities(imgMatch[1]) : null;
 }
 
 /**
@@ -104,16 +138,17 @@ function parseEntry(entryXml: string, subreddit: string, position: number, subsc
 
     // Content HTML — contains external link + comment count
     const contentRaw = entryXml.match(/<content[^>]*>([\s\S]*?)<\/content>/i)?.[1] ?? "";
-    const numComments = parseCommentCount(contentRaw);
+    const contentHtml = decodeXmlEntities(contentRaw);
+    const numComments = parseCommentCount(contentHtml);
+    const selftext = parseBodyText(contentHtml);
+    const externalUrl = parseExternalUrl(contentHtml);
+    const thumbnail = parseThumbnailUrl(entryXml, contentHtml);
 
-    // Determine if self post
-    const isSelf = contentRaw.includes("[link]") === false ||
-                   permalink.includes(postId);
+    const redditPermalink = `https://www.reddit.com${permalink}`;
+    const isSelf = !externalUrl;
 
     // URL
-    const url = isSelf
-      ? `https://www.reddit.com${permalink}`
-      : parseExternalUrl(contentRaw, permalink);
+    const url = externalUrl ?? redditPermalink;
 
     // Domain
     let domain = `self.${subreddit}`;
@@ -128,7 +163,7 @@ function parseEntry(entryXml: string, subreddit: string, position: number, subsc
       id:                   postId,
       name:                 `t3_${postId}`,
       title:                rawTitle,
-      selftext:             "",
+      selftext,
       url,
       permalink,
       author,
@@ -138,7 +173,7 @@ function parseEntry(entryXml: string, subreddit: string, position: number, subsc
       upvote_ratio:         0.90,       // RSS doesn't expose this — use safe default
       num_comments:         numComments,
       created_utc:          createdUtc,
-      thumbnail:            null,
+      thumbnail,
       is_self:              isSelf,
       is_video:             false,
       domain,

@@ -20,8 +20,9 @@ import { getMockPosts } from "../../data/mock";
 import type { RankedPost } from "./types";
 
 const CACHE_TTL_MS  = 20 * 60 * 1000; // 20 min — outlasts 15-min cron cycle
-const OVERVIEW_KEY  = (subs: string[]) => `overview:${[...subs].sort().join(",")}`;
-const SUB_KEY       = (name: string)   => `sub:${name.toLowerCase()}`;
+const CACHE_VERSION = "v4";
+const OVERVIEW_KEY  = (subs: string[]) => `overview:${CACHE_VERSION}:${[...subs].sort().join(",")}`;
+const SUB_KEY       = (name: string)   => `sub:${CACHE_VERSION}:${name.toLowerCase()}`;
 
 function shouldRepairCachedRssFeed(posts: RankedPost[]): boolean {
   const topRss = posts.filter((post) => post.dataSource === "rss").slice(0, 8);
