@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { PostCard } from "./PostCard";
 import { PostModal } from "./PostModal";
+import { useKeyboardNav } from "./useKeyboardNav";
 import type { RankedPost, SortMode } from "../../lib/reddit/types";
 import { useFeedStore } from "../../stores/feedStore";
 
@@ -28,14 +29,16 @@ function applySortClient(posts: RankedPost[], sort: SortMode): RankedPost[] {
   });
 }
 
+
 export function PostList({
   posts,
   showRank = false,
   compact  = false,
   emptyMessage = "No posts found.",
 }: PostListProps) {
-  const [selected,  setSelected]  = useState<RankedPost | null>(null);
-  const [visible,   setVisible]   = useState(PAGE_SIZE);
+  const [selected,     setSelected]     = useState<RankedPost | null>(null);
+  const [visible,      setVisible]      = useState(PAGE_SIZE);
+  const [activeIndex,  setActiveIndex]  = useState<number | null>(null);
   const { filters } = useFeedStore();
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
@@ -76,6 +79,25 @@ export function PostList({
 
     return applySortClient(result, filters.sort);
   }, [posts, filters]);
+
+  // Keyboard navigation
+  useKeyboardNav({
+    posts: filtered.slice(0, visible),
+    activeIndex,
+    setActiveIndex,
+    onOpenModal: setSelected,
+    onCloseModal: () => setSelected(null),
+    modalOpen: selected !== null,
+  });
+
+  // Auto-scroll active card into view
+  useEffect(() => {
+    if (activeIndex !== null) {
+      document
+        .querySelector('[data-post-active="true"]')
+        ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [activeIndex]);
 
   // Intersection Observer — auto-load more when the sentinel scrolls into view
   useEffect(() => {
@@ -123,6 +145,7 @@ export function PostList({
             rank={showRank ? i + 1 : undefined}
             onOpen={setSelected}
             compact={compact}
+            active={activeIndex === i}
           />
         ))}
       </div>

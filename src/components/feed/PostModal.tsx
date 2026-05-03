@@ -130,6 +130,12 @@ export function PostModal({ post, onClose }: PostModalProps) {
               <span>{isHN ? "Source weight" : `r/${post.subreddit} weight`}</span>
               <span className="text-zinc-300">{post.subredditWeight.toFixed(2)}×</span>
             </div>
+            {post.membershipSource && (
+              <div className="mt-1 flex justify-between text-[10px] text-zinc-600 font-mono">
+                <span>Membership</span>
+                <span>{post.membershipSource}</span>
+              </div>
+            )}
             {subConfig && (
               <div className="mt-1 flex justify-between text-[10px] text-zinc-500">
                 <span>Category</span>

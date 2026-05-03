@@ -30,6 +30,7 @@ import {
   BADGE_THRESHOLDS,
 } from "./weights";
 import { getSubredditWeight } from "../utils/subreddits";
+import { getMemberCount, getMembershipDebugLabel } from "../utils/membershipStore";
 import type { RankedPost, RedditPost } from "../reddit/types";
 
 // ─── Component scoring functions ──────────────────────────────────────────────
@@ -152,6 +153,34 @@ function computeBadges(
   return badges;
 }
 
+// ─── Membership-aware weight ──────────────────────────────────────────────────
+
+/**
+ * Derives a scoring weight from member count using log-scaling.
+ * memberCount=0 or unavailable → falls back to staticWeight from subreddits config.
+ * The scale is intentionally modest — this replaces the static weight input,
+ * not a radical new scoring dimension.
+ *
+ * Log-scale reference:
+ *   log1p(11M) ≈ 16.2 | log1p(2M) ≈ 14.5 | log1p(100K) ≈ 11.5 | log1p(1K) ≈ 6.9
+ * Normalized to largest expected community (11M ChatGPT).
+ * Blend: 60% dynamic + 40% static for stability.
+ */
+function membershipWeight(subreddit: string, staticWeight: number): number {
+  const count = getMemberCount(subreddit);
+  if (count <= 0) return staticWeight; // graceful fallback
+
+  // Normalize against 11M (largest community in config)
+  const log        = Math.log1p(count);
+  const normalized = log / Math.log1p(11_000_000);
+  // Blend with static weight for stability: 60% dynamic, 40% static
+  return staticWeight * 0.4 + normalized * 1.6 * 0.6;
+}
+
+const DEBUG_MEMBERSHIP =
+  process.env.NODE_ENV === "development" ||
+  process.env.NEXT_PUBLIC_SHOW_MEMBERSHIP_DEBUG === "true";
+
 // ─── Main ranking function ────────────────────────────────────────────────────
 
 export function rankPost(post: RedditPost): RankedPost {
@@ -169,7 +198,8 @@ export function rankPost(post: RedditPost): RankedPost {
     SCORE_WEIGHTS.engagement * engagement +
     SCORE_WEIGHTS.quality    * quality;
 
-  const subWeight  = getSubredditWeight(post.subreddit);
+  const staticWeight = getSubredditWeight(post.subreddit);
+  const subWeight    = membershipWeight(post.subreddit, staticWeight);
   // Absolute scale: 100 = perfect score on all dimensions from a Tier 1 sub.
   // Most real posts land 40–85. No batch normalisation — the number means something.
   const finalScore = Math.min(100, raw * subWeight);
@@ -186,6 +216,7 @@ export function rankPost(post: RedditPost): RankedPost {
     subredditWeight: subWeight,
     badges,
     dataSource: post.source === "hn" ? "hn" : "api",
+    ...(DEBUG_MEMBERSHIP && { membershipSource: getMembershipDebugLabel(post.subreddit) }),
   };
 }
 
@@ -276,7 +307,8 @@ export function rankPostsFallback(posts: RedditPost[]): RankedPost[] {
     const recency = Math.max(0, (1 - hoursOld / FALLBACK_RECENCY_WINDOW) * 100);
 
     // Subreddit tier weight — our most reliable quality signal
-    const subWeight = getSubredditWeight(post.subreddit);
+    const staticWeight = getSubredditWeight(post.subreddit);
+    const subWeight    = membershipWeight(post.subreddit, staticWeight);
 
     // Junk penalty — megathreads, memes, nostalgia posts
     const junkMultiplier = isFallbackJunk(post.title) ? 0.4 : 1.0;
@@ -315,6 +347,7 @@ export function rankPostsFallback(posts: RedditPost[]): RankedPost[] {
       subredditWeight: subWeight,
       badges,
       dataSource: "rss" as const,
+      ...(DEBUG_MEMBERSHIP && { membershipSource: getMembershipDebugLabel(post.subreddit) }),
     } as RankedPost;
   });
 

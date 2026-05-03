@@ -21,9 +21,10 @@ interface PostCardProps {
   rank?:    number;
   onOpen?:  (post: RankedPost) => void;
   compact?: boolean;
+  active?:  boolean;
 }
 
-export function PostCard({ post, rank, onOpen, compact }: PostCardProps) {
+export function PostCard({ post, rank, onOpen, compact, active }: PostCardProps) {
   if (post.dataSource === "rss") {
     return (
       <PostCardFallback
@@ -31,6 +32,7 @@ export function PostCard({ post, rank, onOpen, compact }: PostCardProps) {
         rank={rank}
         onOpen={onOpen}
         compact={compact}
+        active={active}
       />
     );
   }
@@ -41,6 +43,7 @@ export function PostCard({ post, rank, onOpen, compact }: PostCardProps) {
       rank={rank}
       onOpen={onOpen}
       compact={compact}
+      active={active}
     />
   );
 }

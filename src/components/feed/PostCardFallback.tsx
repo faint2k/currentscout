@@ -11,6 +11,15 @@ interface PostCardFallbackProps {
   rank?:    number;
   onOpen?:  (post: RankedPost) => void;
   compact?: boolean;
+  active?:  boolean;
+}
+
+/** Returns a Tailwind border-left color class based on the post's final score */
+function scoreStripe(score: number): string {
+  if (score >= 80) return "border-l-violet-500";
+  if (score >= 60) return "border-l-blue-500";
+  if (score >= 40) return "border-l-zinc-600";
+  return "border-l-zinc-800/40";
 }
 
 // Only "Rising" is reliable from RSS — it fires on recency + feed position,
@@ -32,19 +41,21 @@ const RELIABLE_BADGES: SignalBadge[] = [];
  *   Keywords  — title-based quality heuristic
  *   Engagement is always 0 and omitted entirely.
  */
-export function PostCardFallback({ post, rank, onOpen, compact = false }: PostCardFallbackProps) {
+export function PostCardFallback({ post, rank, onOpen, compact = false, active = false }: PostCardFallbackProps) {
   const [scoreOpen, setScoreOpen] = useState(false);
 
   const domain     = displayDomain(post.url, post.is_self, post.subreddit);
   const redditLink = redditUrl(post.permalink);
   const finalColor = scoreColor(post.scores.final);
+  const titleHref  = post.is_self ? redditLink : post.url;
 
   // Filter badges down to the reliable subset
   const safeBadges = post.badges.filter((b) => RELIABLE_BADGES.includes(b));
 
   return (
     <article
-      className={`group relative bg-zinc-900 border border-zinc-800/70 rounded-lg hover:border-zinc-700/80 transition-all duration-150 ${
+      data-post-active={active ? "true" : undefined}
+      className={`group relative bg-zinc-900 border border-zinc-800/70 border-l-[3px] ${scoreStripe(post.scores.final)} rounded-lg hover:border-zinc-700/80 transition-all duration-150 ${active ? "ring-1 ring-violet-500/50" : ""} ${
         compact ? "px-3 py-2.5" : "px-4 py-3"
       }`}
     >
@@ -60,14 +71,27 @@ export function PostCardFallback({ post, rank, onOpen, compact = false }: PostCa
         <div className="flex-1 min-w-0">
           {/* Title row */}
           <div className="flex items-start gap-2 mb-1.5">
-            <h2
-              className={`flex-1 min-w-0 font-medium leading-snug text-zinc-100 group-hover:text-white transition-colors cursor-pointer ${
-                compact ? "text-sm" : "text-[13px]"
-              }`}
-              onClick={() => onOpen?.(post)}
+            <a
+              href={titleHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 min-w-0"
             >
-              {post.title}
-            </h2>
+              <h2
+                className={`font-medium leading-snug text-zinc-100 group-hover:text-white hover:underline transition-colors cursor-pointer ${
+                  compact ? "text-sm" : "text-[13px]"
+                }`}
+              >
+                {post.title}
+              </h2>
+            </a>
+            <button
+              onClick={(e) => { e.preventDefault(); onOpen?.(post); }}
+              title="View details"
+              className="opacity-0 group-hover:opacity-100 shrink-0 text-zinc-600 hover:text-zinc-300 text-[10px] px-1 py-0.5 rounded hover:bg-zinc-800 transition-all"
+            >
+              ···
+            </button>
           </div>
 
           {/* Meta row — no score, no comments, no ratio */}
@@ -101,14 +125,6 @@ export function PostCardFallback({ post, rank, onOpen, compact = false }: PostCa
               </>
             )}
 
-            {/* RSS provenance indicator — always shown */}
-            <span className="text-zinc-600">·</span>
-            <span
-              className="text-[9px] text-zinc-600 font-mono border border-zinc-800 rounded px-1 py-0.5 leading-none"
-              title="Scores estimated from RSS feed position — real upvote data unavailable"
-            >
-              RSS est.
-            </span>
           </div>
 
           {/* Top comment preview */}
@@ -116,6 +132,13 @@ export function PostCardFallback({ post, rank, onOpen, compact = false }: PostCa
             <p className="mt-1.5 text-[11px] text-zinc-600 leading-snug line-clamp-2">
               <span className="text-zinc-700 font-medium">Top comment: </span>
               {post.topComment}
+            </p>
+          )}
+
+          {/* Selftext preview — only when no topComment and post has self text */}
+          {!post.topComment && post.is_self && post.selftext && post.selftext.length > 10 && (
+            <p className="text-[11px] text-zinc-600 leading-snug mt-1.5 line-clamp-2">
+              {post.selftext.slice(0, 130).replace(/\s+\S*$/, "") + "…"}
             </p>
           )}
 

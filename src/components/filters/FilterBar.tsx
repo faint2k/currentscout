@@ -54,7 +54,8 @@ export function FilterBar({
     : null;
 
   return (
-    <div className="flex flex-wrap items-center gap-2 mb-4 pb-3 border-b border-zinc-800/60">
+    <div className="sticky top-12 z-30 bg-zinc-950/95 backdrop-blur-sm pb-3 mb-4">
+    <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-zinc-800/60">
       {/* Label + count */}
       <div className="flex items-center gap-2 mr-auto">
         {label && (
@@ -134,6 +135,7 @@ export function FilterBar({
           reset
         </button>
       )}
+    </div>
     </div>
   );
 }

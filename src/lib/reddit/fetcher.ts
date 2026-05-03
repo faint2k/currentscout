@@ -36,12 +36,35 @@ export async function fetchOverviewFeed(
   // 2. Cold-start: Redis empty — try JSON API then RSS, write result to Redis
   console.warn("[fetcher] Redis cold start — fetching directly (one-time)");
 
-  let raw = await fetchMultipleSubreddits(subreddits, { sort: "hot", limit: 25 });
-  let isRSS = false;
+  // Restore membership snapshot if available (populated by cron)
+  try {
+    const { importSnapshot, initStaticFallbacks } = await import("../utils/membershipStore");
+    const { SUBREDDITS } = await import("../utils/subreddits");
+    initStaticFallbacks(SUBREDDITS);
 
-  // JSON API blocked? Fall back to RSS
+    const memberSnapshot = await cache.get<Record<string, import("../utils/membershipStore").SubredditMembership>>("membership:snapshot");
+    if (memberSnapshot) {
+      importSnapshot(memberSnapshot.value);
+      console.log("[fetcher] Loaded membership snapshot from cache");
+    }
+  } catch {
+    // Non-fatal — static fallbacks remain active
+  }
+
+  // FORCE_RSS_MODE=true in .env.local bypasses the public JSON API so that
+  // local dev previews reflect the same RankPostFallback/RSS path that runs
+  // on Vercel (where Reddit blocks datacenter IPs and JSON API returns nothing).
+  const forceRSS = process.env.FORCE_RSS_MODE === "true";
+
+  let raw = forceRSS
+    ? []
+    : await fetchMultipleSubreddits(subreddits, { sort: "hot", limit: 25 });
+  let isRSS = forceRSS;
+
+  // JSON API blocked (or forced off)? Fall back to RSS
   if (raw.length === 0) {
-    console.warn("[fetcher] JSON API failed — using RSS fallback (limited data)");
+    if (!forceRSS) console.warn("[fetcher] JSON API failed — using RSS fallback (limited data)");
+    else           console.warn("[fetcher] FORCE_RSS_MODE=true — using RSS path directly");
     raw    = await fetchMultipleSubredditsRSS(subreddits, "hot", 25);
     isRSS  = true;
   }
