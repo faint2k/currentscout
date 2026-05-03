@@ -45,12 +45,10 @@ export function FilterBar({
     filters.time !== "24h";
 
   const freshness = fetchedAt
-    ? (() => {
-        const mins = Math.floor((Date.now() - fetchedAt) / 60000);
-        if (mins < 1) return "just now";
-        if (mins === 1) return "1 min ago";
-        return `${mins} min ago`;
-      })()
+    ? new Date(fetchedAt).toLocaleTimeString([], {
+        hour: "numeric",
+        minute: "2-digit",
+      })
     : null;
 
   return (
@@ -69,7 +67,7 @@ export function FilterBar({
             className={`text-[10px] ${cached ? "text-zinc-600" : "text-green-600"}`}
             title={cached ? "From cache" : "Fresh data"}
           >
-            {cached ? "⬤" : "◎"} {freshness}
+            {cached ? "⬤" : "◎"} updated {freshness}
           </span>
         )}
       </div>

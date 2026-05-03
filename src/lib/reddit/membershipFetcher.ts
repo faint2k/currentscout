@@ -34,7 +34,6 @@ export async function fetchSubredditAbout(name: string): Promise<SubredditAbout>
       return { name, subscribers: 0, source: "failed" };
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const json = (await res.json()) as { data?: { subscribers?: number } };
     const subscribers = json?.data?.subscribers ?? 0;
 

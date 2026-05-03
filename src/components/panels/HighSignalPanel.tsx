@@ -36,7 +36,7 @@ export function HighSignalPanel() {
           <p>− Meme / humor content (−28% score)</p>
           <p>− Short titles (&lt;25 chars, −12%)</p>
           <p>− Low-effort hype posts</p>
-          <p>− Fluff keywords: "lol", "bruh", etc.</p>
+          <p>− Fluff keywords: &quot;lol&quot;, &quot;bruh&quot;, etc.</p>
         </div>
       </div>
     </div>

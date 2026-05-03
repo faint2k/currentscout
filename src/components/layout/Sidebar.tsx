@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { SUBREDDITS, SUBREDDITS_BY_CATEGORY, CATEGORIES } from "../../lib/utils/subreddits";
+import { SUBREDDITS_BY_CATEGORY, CATEGORIES } from "../../lib/utils/subreddits";
 import { useFeedStore } from "../../stores/feedStore";
 
 const TIER_DOT: Record<number, string> = {
@@ -23,7 +23,11 @@ export function Sidebar() {
   const toggleCat = (cat: string) => {
     setExpandedCats((prev) => {
       const next = new Set(prev);
-      next.has(cat) ? next.delete(cat) : next.add(cat);
+      if (next.has(cat)) {
+        next.delete(cat);
+      } else {
+        next.add(cat);
+      }
       return next;
     });
   };

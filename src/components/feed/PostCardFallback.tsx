@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import { SubredditChip } from "../ui/SubredditChip";
 import { timeAgo, redditUrl, displayDomain, scoreColor } from "../../lib/utils/format";
 import type { RankedPost } from "../../lib/reddit/types";
-import type { SignalBadge } from "../../lib/ranking/scorer";
 
 interface PostCardFallbackProps {
   post:     RankedPost;
@@ -21,13 +20,6 @@ function scoreStripe(score: number): string {
   if (score >= 40) return "border-l-zinc-600";
   return "border-l-zinc-800/40";
 }
-
-// Only "Rising" is reliable from RSS — it fires on recency + feed position,
-// both of which we actually have. The rest (Trending, Hot, High Signal, Deep Dive)
-// require real engagement data and are suppressed.
-// No badges are reliable from RSS — position and recency inputs are estimated.
-// Suppress all badges in fallback mode.
-const RELIABLE_BADGES: SignalBadge[] = [];
 
 /**
  * PostCard for RSS fallback posts.
@@ -48,9 +40,6 @@ export function PostCardFallback({ post, rank, onOpen, compact = false, active =
   const redditLink = redditUrl(post.permalink);
   const finalColor = scoreColor(post.scores.final);
   const titleHref  = post.is_self ? redditLink : post.url;
-
-  // Filter badges down to the reliable subset
-  const safeBadges = post.badges.filter((b) => RELIABLE_BADGES.includes(b));
 
   return (
     <article
