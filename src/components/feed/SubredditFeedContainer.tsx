@@ -6,6 +6,11 @@ import { PostList } from "./PostList";
 import { FilterBar } from "../filters/FilterBar";
 import { SubredditChip } from "../ui/SubredditChip";
 import { getSubredditConfig } from "../../lib/utils/subreddits";
+import {
+  getReturnCtaLabel,
+  getReturnDestinationLabel,
+  sanitizeInternalReturnPath,
+} from "../../lib/utils/returnNavigation";
 import type { RankedPost } from "../../lib/reddit/types";
 
 interface SubredditFeedContainerProps {
@@ -20,6 +25,10 @@ export function SubredditFeedContainer({ subreddit }: SubredditFeedContainerProp
   const [cached,    setCached]    = useState(false);
 
   const config = getSubredditConfig(subreddit);
+  const currentSearch = typeof window !== "undefined" ? window.location.search : "";
+  const returnHref = sanitizeInternalReturnPath(new URLSearchParams(currentSearch).get("from")) ?? "/";
+  const returnLabel = getReturnCtaLabel(returnHref);
+  const returnDestination = getReturnDestinationLabel(returnHref);
 
   const fetchPosts = useCallback(async () => {
     setLoading(true);
@@ -74,11 +83,11 @@ export function SubredditFeedContainer({ subreddit }: SubredditFeedContainerProp
       <div className="mb-4 rounded-2xl border border-zinc-800/70 bg-zinc-900/50 p-3">
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <Link
-            href="/"
+            href={returnHref}
             className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/25 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-100 transition-colors hover:border-violet-400/40 hover:bg-violet-500/14"
           >
             <span aria-hidden="true">←</span>
-            <span>Back to CurrentScout</span>
+            <span>{returnLabel}</span>
           </Link>
 
           <SubredditChip name={subreddit} clickable={false} className="text-sm px-2 py-1" />
@@ -95,7 +104,7 @@ export function SubredditFeedContainer({ subreddit }: SubredditFeedContainerProp
         )}
 
         <p className="mt-2 text-[11px] text-zinc-500">
-          You’re viewing one community. Jump back to the full feed anytime.
+          You’re viewing one community. Jump back to {returnDestination === "CurrentScout" ? "the full feed" : returnDestination.toLowerCase()} anytime.
         </p>
       </div>
       <FilterBar totalPosts={posts.length} fetchedAt={fetchedAt} cached={cached} />

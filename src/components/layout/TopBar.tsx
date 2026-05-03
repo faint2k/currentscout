@@ -6,6 +6,11 @@ import { usePathname } from "next/navigation";
 import { useFeedStore } from "../../stores/feedStore";
 import { MobileNav } from "./MobileNav";
 import type { SortMode, TimeFilter } from "../../lib/reddit/types";
+import {
+  getCompactReturnLabel,
+  getReturnCtaLabel,
+  sanitizeInternalReturnPath,
+} from "../../lib/utils/returnNavigation";
 
 const SORT_LABELS: Record<SortMode, string> = {
   weighted: "Best",
@@ -32,6 +37,17 @@ export function TopBar() {
   const currentSubreddit = pathname.startsWith("/r/")
     ? decodeURIComponent(pathname.replace("/r/", "").split("/")[0] || "")
     : null;
+  const [returnPath, setReturnPath] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const nextReturnPath = sanitizeInternalReturnPath(new URLSearchParams(window.location.search).get("from"));
+    setReturnPath(nextReturnPath);
+  }, [pathname]);
+
+  const returnHref = returnPath ?? "/";
+  const returnLabel = getReturnCtaLabel(returnHref);
+  const compactReturnLabel = getCompactReturnLabel(returnHref);
 
   const navLinks = [
     { href: "/", label: "Overview" },
@@ -96,12 +112,12 @@ export function TopBar() {
 
           {currentSubreddit && (
             <Link
-              href="/"
+              href={returnHref}
               className="hidden items-center gap-2 rounded-xl border border-violet-500/25 bg-violet-500/10 px-3 py-2 text-xs font-medium text-violet-100 transition-colors hover:border-violet-400/40 hover:bg-violet-500/14 lg:flex"
-              aria-label="Return to the main CurrentScout feed"
+              aria-label={returnLabel}
             >
               <span aria-hidden="true">←</span>
-              <span>Back to CurrentScout</span>
+              <span>{returnLabel}</span>
               <span className="text-violet-200/70">r/{currentSubreddit}</span>
             </Link>
           )}
@@ -110,12 +126,12 @@ export function TopBar() {
             <div className="flex min-w-0 items-center gap-2 lg:hidden">
               {currentSubreddit && (
                 <Link
-                  href="/"
+                  href={returnHref}
                   className="flex items-center gap-1.5 rounded-xl border border-violet-500/25 bg-violet-500/10 px-2.5 py-2 text-[11px] font-medium text-violet-100 transition-colors hover:border-violet-400/40 hover:bg-violet-500/14"
-                  aria-label="Back to the main CurrentScout feed"
+                  aria-label={returnLabel}
                 >
                   <span aria-hidden="true">←</span>
-                  <span>Feed</span>
+                  <span>{compactReturnLabel}</span>
                 </Link>
               )}
 
