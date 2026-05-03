@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import type { FeedFilters, SortMode, TimeFilter } from "../lib/reddit/types";
+import type { FeedFilters } from "../lib/reddit/types";
 
 interface FeedStore {
   filters:    FeedFilters;

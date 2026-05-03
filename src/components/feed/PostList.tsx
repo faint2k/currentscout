@@ -36,14 +36,7 @@ export function PostList({
   compact  = false,
   emptyMessage = "No posts found.",
 }: PostListProps) {
-  const [selected,     setSelected]     = useState<RankedPost | null>(null);
-  const [visible,      setVisible]      = useState(PAGE_SIZE);
-  const [activeIndex,  setActiveIndex]  = useState<number | null>(null);
   const { filters } = useFeedStore();
-  const loadMoreRef = useRef<HTMLDivElement>(null);
-
-  // Reset visible count whenever filters or source posts change
-  useEffect(() => { setVisible(PAGE_SIZE); }, [filters, posts]);
 
   const filtered = useMemo(() => {
     let result = posts;
@@ -79,6 +72,36 @@ export function PostList({
 
     return applySortClient(result, filters.sort);
   }, [posts, filters]);
+
+  const resetKey = useMemo(
+    () => JSON.stringify({ filters, postIds: posts.map((post) => post.id) }),
+    [filters, posts]
+  );
+
+  return (
+    <PaginatedPostList
+      key={resetKey}
+      filtered={filtered}
+      showRank={showRank}
+      compact={compact}
+      emptyMessage={emptyMessage}
+    />
+  );
+}
+
+interface PaginatedPostListProps {
+  filtered: RankedPost[];
+  showRank: boolean;
+  compact: boolean;
+  emptyMessage: string;
+}
+
+function PaginatedPostList({ filtered, showRank, compact, emptyMessage }: PaginatedPostListProps) {
+  const [selected, setSelected] = useState<RankedPost | null>(null);
+  const [visible, setVisible] = useState(PAGE_SIZE);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const { filters } = useFeedStore();
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   // Keyboard navigation
   useKeyboardNav({
