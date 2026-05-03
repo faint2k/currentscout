@@ -23,6 +23,23 @@ const CACHE_TTL_MS  = 20 * 60 * 1000; // 20 min — outlasts 15-min cron cycle
 const OVERVIEW_KEY  = (subs: string[]) => `overview:${[...subs].sort().join(",")}`;
 const SUB_KEY       = (name: string)   => `sub:${name.toLowerCase()}`;
 
+function shouldRepairCachedRssFeed(posts: RankedPost[]): boolean {
+  const topRss = posts.filter((post) => post.dataSource === "rss").slice(0, 8);
+  if (topRss.length < 4) return false;
+
+  const hasDiscussion = topRss.some(
+    (post) => (post.num_comments || 0) > 0 || Boolean(post.topComment),
+  );
+
+  return !hasDiscussion;
+}
+
+async function repairCachedRssFeed(posts: RankedPost[], limit = 12): Promise<RankedPost[]> {
+  const repaired = posts.map((post) => ({ ...post }));
+  await enrichWithThreadContext(repaired, limit);
+  return rankPostsFallback(repaired);
+}
+
 // ─── Overview feed ────────────────────────────────────────────────────────────
 
 export async function fetchOverviewFeed(
@@ -31,6 +48,12 @@ export async function fetchOverviewFeed(
   // 1. Redis hit (normal path — cron has pre-populated this)
   const hit = await cache.get<RankedPost[]>(OVERVIEW_KEY(subreddits));
   if (hit) {
+    if (shouldRepairCachedRssFeed(hit.value)) {
+      const repaired = await repairCachedRssFeed(hit.value, 12);
+      await cache.set(OVERVIEW_KEY(subreddits), repaired, CACHE_TTL_MS);
+      return { posts: repaired, cached: true, fetchedAt: hit.timestamp, sources: subreddits };
+    }
+
     return { posts: hit.value, cached: true, fetchedAt: hit.timestamp, sources: subreddits };
   }
 
@@ -109,6 +132,12 @@ export async function fetchSubredditFeed(
   // 1. Redis hit
   const hit = await cache.get<RankedPost[]>(SUB_KEY(subreddit));
   if (hit) {
+    if (shouldRepairCachedRssFeed(hit.value)) {
+      const repaired = await repairCachedRssFeed(hit.value, 12);
+      await cache.set(SUB_KEY(subreddit), repaired, CACHE_TTL_MS);
+      return { posts: repaired, cached: true, fetchedAt: hit.timestamp };
+    }
+
     return { posts: hit.value, cached: true, fetchedAt: hit.timestamp };
   }
 
