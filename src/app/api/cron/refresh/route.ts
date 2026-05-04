@@ -19,7 +19,7 @@ import { SUBREDDIT_NAMES } from "../../../../lib/utils/subreddits";
 import type { RankedPost, RedditPost } from "../../../../lib/reddit/types";
 
 const CACHE_TTL_MS  = 20 * 60 * 1000;
-const CACHE_VERSION = "v5";
+const CACHE_VERSION = "v6";
 const OVERVIEW_KEY  = `overview:${CACHE_VERSION}:${[...SUBREDDIT_NAMES].sort().join(",")}`;
 const SUB_KEY       = (name: string) => `sub:${CACHE_VERSION}:${name.toLowerCase()}`;
 

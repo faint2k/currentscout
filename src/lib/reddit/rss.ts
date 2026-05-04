@@ -42,6 +42,16 @@ function decodeXmlEntities(str: string): string {
     .replace(/<[^>]+>/g, ""); // strip any remaining HTML tags from title
 }
 
+function decodeHtmlEntities(str: string): string {
+  return str
+    .replace(/&amp;/g,  "&")
+    .replace(/&lt;/g,   "<")
+    .replace(/&gt;/g,   ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g,  "'")
+    .replace(/&#32;/g,  " ");
+}
+
 function stripHtml(html: string): string {
   return html
     .replace(/<br\s*\/?>/gi, "\n")
@@ -138,7 +148,7 @@ function parseEntry(entryXml: string, subreddit: string, position: number, subsc
 
     // Content HTML — contains external link + comment count
     const contentRaw = entryXml.match(/<content[^>]*>([\s\S]*?)<\/content>/i)?.[1] ?? "";
-    const contentHtml = decodeXmlEntities(contentRaw);
+    const contentHtml = decodeHtmlEntities(contentRaw);
     const numComments = parseCommentCount(contentHtml);
     const selftext = parseBodyText(contentHtml);
     const externalUrl = parseExternalUrl(contentHtml);
