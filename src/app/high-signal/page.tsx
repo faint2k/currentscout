@@ -1,10 +1,13 @@
 import { AppLayout } from "../../components/layout/AppLayout";
 import { FeedContainer } from "../../components/feed/FeedContainer";
 import { HighSignalPanel } from "../../components/panels/HighSignalPanel";
+import { loadFeedData } from "../../lib/feed/loadFeedData";
 
 export const revalidate = 900;
 
-export default function HighSignalPage() {
+export default async function HighSignalPage() {
+  const initialFeed = await loadFeedData({ mode: "high-signal", limit: 100 });
+
   return (
     <AppLayout rightPanel={<HighSignalPanel />}>
       <div className="mb-4 pt-1">
@@ -16,6 +19,9 @@ export default function HighSignalPage() {
       <FeedContainer
         mode="high-signal"
         showRank
+        initialPosts={initialFeed.posts}
+        initialFetchedAt={initialFeed.fetchedAt}
+        initialCached={initialFeed.cached}
       />
     </AppLayout>
   );

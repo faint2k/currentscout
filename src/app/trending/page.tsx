@@ -1,10 +1,13 @@
 import { AppLayout } from "../../components/layout/AppLayout";
 import { FeedContainer } from "../../components/feed/FeedContainer";
 import { TrendingPanel } from "../../components/panels/TrendingPanel";
+import { loadFeedData } from "../../lib/feed/loadFeedData";
 
 export const revalidate = 900;
 
-export default function TrendingPage() {
+export default async function TrendingPage() {
+  const initialFeed = await loadFeedData({ mode: "trending", limit: 100 });
+
   return (
     <AppLayout rightPanel={<TrendingPanel />}>
       <div className="mb-4 pt-1">
@@ -16,6 +19,9 @@ export default function TrendingPage() {
       <FeedContainer
         mode="trending"
         showRank
+        initialPosts={initialFeed.posts}
+        initialFetchedAt={initialFeed.fetchedAt}
+        initialCached={initialFeed.cached}
       />
     </AppLayout>
   );
