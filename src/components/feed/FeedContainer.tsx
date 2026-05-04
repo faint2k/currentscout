@@ -17,6 +17,8 @@ interface FeedContainerProps {
   showHero?: boolean;
 }
 
+const CLIENT_FETCH_TIMEOUT_MS = 12000;
+
 export function FeedContainer({
   mode = "overview",
   subreddits,
@@ -28,20 +30,31 @@ export function FeedContainer({
   showHero = false,
 }: FeedContainerProps) {
   const [posts, setPosts] = useState<RankedPost[]>(initialPosts ?? []);
-  const [loading, setLoading] = useState(!initialPosts);
+  const [loading, setLoading] = useState(initialPosts === undefined);
   const [error, setError] = useState<string | null>(null);
   const [fetchedAt, setFetchedAt] = useState<number | undefined>(initialFetchedAt);
   const [cached, setCached] = useState<boolean>(initialCached ?? false);
   const [rssBannerOpen, setRssBannerOpen] = useState(true);
 
+  const hasPosts = posts.length > 0;
+  const showBlockingLoading = loading && !hasPosts;
+  const showRefreshError = !loading && !!error && hasPosts;
+
   const fetchPosts = useCallback(async () => {
-    setLoading(true);
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), CLIENT_FETCH_TIMEOUT_MS);
+
+    if (!hasPosts) setLoading(true);
     setError(null);
+
     try {
       const params = new URLSearchParams({ mode, limit: "100" });
       if (subreddits?.length) params.set("subreddits", subreddits.join(","));
 
-      const res = await fetch(`/api/posts?${params}`);
+      const res = await fetch(`/api/posts?${params.toString()}`, {
+        signal: controller.signal,
+        cache: "no-store",
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const data = await res.json();
@@ -49,21 +62,28 @@ export function FeedContainer({
       setFetchedAt(data.fetchedAt);
       setCached(data.cached);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load posts");
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setError("Feed refresh timed out. Showing the last available posts.");
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to load posts");
+      }
     } finally {
+      window.clearTimeout(timeoutId);
       setLoading(false);
     }
-  }, [mode, subreddits]);
+  }, [hasPosts, mode, subreddits]);
 
   useEffect(() => {
-    if (!initialPosts) fetchPosts();
+    if (initialPosts === undefined) {
+      void fetchPosts();
+    }
   }, [fetchPosts, initialPosts]);
 
   const hasRssPosts = posts.some((p) => p.dataSource === "rss");
 
   return (
     <div>
-      <HeaderIntro showHero={showHero} label={label} loading={loading} />
+      <HeaderIntro showHero={showHero} label={label} loading={loading && !hasPosts} refreshing={loading && hasPosts} />
 
       {hasRssPosts && rssBannerOpen && (
         <div className="mb-4 rounded-2xl border border-amber-500/20 bg-amber-500/8 px-4 py-3 text-sm text-zinc-200 shadow-[0_1px_0_rgba(255,255,255,0.02)]">
@@ -86,7 +106,7 @@ export function FeedContainer({
         </div>
       )}
 
-      {!loading && (
+      {!showBlockingLoading && (
         <FilterBar
           totalPosts={posts.length}
           fetchedAt={fetchedAt}
@@ -95,9 +115,23 @@ export function FeedContainer({
         />
       )}
 
-      {loading && <LoadingState label={label} />}
+      {showRefreshError && (
+        <div className="mb-4 rounded-2xl border border-amber-500/20 bg-amber-500/8 px-4 py-3 text-sm text-amber-100">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span>{error}</span>
+            <button
+              onClick={fetchPosts}
+              className="self-start rounded-lg border border-amber-400/25 px-3 py-1 text-xs font-medium text-amber-100 transition-colors hover:border-amber-300/40 hover:bg-amber-400/10"
+            >
+              Retry refresh
+            </button>
+          </div>
+        </div>
+      )}
 
-      {error && !loading && (
+      {showBlockingLoading && <LoadingState label={label} />}
+
+      {error && !loading && !hasPosts && (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900/60 py-16 text-zinc-500">
           <span className="mb-3 text-3xl text-zinc-400">⚠</span>
           <p className="text-sm text-zinc-300">{error}</p>
@@ -110,7 +144,19 @@ export function FeedContainer({
         </div>
       )}
 
-      {!loading && !error && <PostList posts={posts} showRank={showRank} />}
+      {!showBlockingLoading && !error && !hasPosts && (
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900/60 py-16 text-zinc-500">
+          <p className="text-sm text-zinc-300">No posts are available right now.</p>
+          <button
+            onClick={fetchPosts}
+            className="mt-3 text-xs text-violet-300 underline underline-offset-4 transition-colors hover:text-violet-200"
+          >
+            Refresh feed
+          </button>
+        </div>
+      )}
+
+      {!showBlockingLoading && hasPosts && <PostList posts={posts} showRank={showRank} />}
     </div>
   );
 }
@@ -119,10 +165,12 @@ function HeaderIntro({
   showHero,
   label,
   loading,
+  refreshing,
 }: {
   showHero: boolean;
   label?: string;
   loading: boolean;
+  refreshing: boolean;
 }) {
   if (!showHero) {
     return label ? <h1 className="mb-3 text-base font-semibold text-zinc-100">{label}</h1> : null;
@@ -134,7 +182,8 @@ function HeaderIntro({
         <span className="rounded-full border border-zinc-800 bg-zinc-900/80 px-2 py-1 text-zinc-400">
           AI signal monitor
         </span>
-        {loading && <span className="text-zinc-600">Loading fresh posts…</span>}
+        {loading && <span className="text-zinc-600">Loading posts…</span>}
+        {refreshing && <span className="text-zinc-600">Refreshing posts…</span>}
       </div>
       <h1 className="mt-3 max-w-3xl text-xl font-bold leading-tight tracking-tight text-zinc-100 sm:text-2xl lg:text-[2rem]">
         {SITE_TAGLINE}
@@ -154,7 +203,7 @@ function LoadingState({ label }: { label?: string }) {
         {Array.from({ length: 8 }).map((_, i) => (
           <div
             key={i}
-            className="rounded-2xl border border-zinc-800/70 bg-zinc-900/70 px-4 py-3 animate-pulse"
+            className="animate-pulse rounded-2xl border border-zinc-800/70 bg-zinc-900/70 px-4 py-3"
           >
             <div className="mb-2 h-3 w-3/4 rounded bg-zinc-800" />
             <div className="mb-3 h-2 w-1/2 rounded bg-zinc-800/90" />

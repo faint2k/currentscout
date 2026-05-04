@@ -10,32 +10,9 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { fetchOverviewFeed } from "../../../lib/reddit/fetcher";
-import { filterTrending, filterHighSignal } from "../../../lib/ranking/scorer";
+import { loadFeedData } from "../../../lib/feed/loadFeedData";
 import { SUBREDDIT_NAMES } from "../../../lib/utils/subreddits";
-import type { RankedPost, SortMode, TimeFilter } from "../../../lib/reddit/types";
-
-function applyTimeFilter(posts: RankedPost[], time: TimeFilter): RankedPost[] {
-  if (time === "all") return posts;
-  const limits: Record<TimeFilter, number> = {
-    "1h": 1, "4h": 4, "12h": 12, "24h": 24, "3d": 72, "7d": 168, "all": Infinity,
-  };
-  const maxHours = limits[time];
-  return posts.filter((p) => p.hoursOld <= maxHours);
-}
-
-function applySort(posts: RankedPost[], sort: SortMode): RankedPost[] {
-  return [...posts].sort((a, b) => {
-    switch (sort) {
-      case "trending":   return b.scores.momentum   - a.scores.momentum;
-      case "hot":        return b.scores.engagement - a.scores.engagement;
-      case "new":        return b.created_utc        - a.created_utc;
-      case "top":        return b.score             - a.score;
-      case "weighted":
-      default:           return b.scores.final      - a.scores.final;
-    }
-  });
-}
+import type { SortMode, TimeFilter } from "../../../lib/reddit/types";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
@@ -51,19 +28,17 @@ export async function GET(req: NextRequest) {
   const mode  = searchParams.get("mode") ?? "overview";
 
   try {
-    const { posts, cached, fetchedAt, sources } = await fetchOverviewFeed(subreddits);
-
-    let filtered = applyTimeFilter(posts, time);
-
-    if (mode === "trending")    filtered = filterTrending(filtered);
-    if (mode === "high-signal") filtered = filterHighSignal(filtered);
-
-    const sorted  = applySort(filtered, sort);
-    const sliced  = sorted.slice(0, limit);
+    const { posts, total, cached, fetchedAt, sources } = await loadFeedData({
+      subreddits,
+      sort,
+      time,
+      limit,
+      mode: mode as "overview" | "trending" | "high-signal",
+    });
 
     const response = NextResponse.json({
-      posts:     sliced,
-      total:     filtered.length,
+      posts,
+      total,
       fetchedAt,
       cached,
       sources,

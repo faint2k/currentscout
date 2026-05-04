@@ -15,14 +15,24 @@ import type { RankedPost } from "../../lib/reddit/types";
 
 interface SubredditFeedContainerProps {
   subreddit: string;
+  initialPosts?: RankedPost[];
+  initialFetchedAt?: number;
+  initialCached?: boolean;
 }
 
-export function SubredditFeedContainer({ subreddit }: SubredditFeedContainerProps) {
-  const [posts,     setPosts]     = useState<RankedPost[]>([]);
-  const [loading,   setLoading]   = useState(true);
-  const [error,     setError]     = useState<string | null>(null);
-  const [fetchedAt, setFetchedAt] = useState<number | undefined>();
-  const [cached,    setCached]    = useState(false);
+const CLIENT_FETCH_TIMEOUT_MS = 12000;
+
+export function SubredditFeedContainer({
+  subreddit,
+  initialPosts,
+  initialFetchedAt,
+  initialCached,
+}: SubredditFeedContainerProps) {
+  const [posts, setPosts] = useState<RankedPost[]>(initialPosts ?? []);
+  const [loading, setLoading] = useState(initialPosts === undefined);
+  const [error, setError] = useState<string | null>(null);
+  const [fetchedAt, setFetchedAt] = useState<number | undefined>(initialFetchedAt);
+  const [cached, setCached] = useState(initialCached ?? false);
 
   const config = getSubredditConfig(subreddit);
   const currentSearch = typeof window !== "undefined" ? window.location.search : "";
@@ -30,50 +40,59 @@ export function SubredditFeedContainer({ subreddit }: SubredditFeedContainerProp
   const returnLabel = getReturnCtaLabel(returnHref);
   const returnDestination = getReturnDestinationLabel(returnHref);
 
+  const hasPosts = posts.length > 0;
+  const showBlockingLoading = loading && !hasPosts;
+  const showRefreshError = !loading && !!error && hasPosts;
+
   const fetchPosts = useCallback(async () => {
-    setLoading(true);
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), CLIENT_FETCH_TIMEOUT_MS);
+
+    if (!hasPosts) setLoading(true);
     setError(null);
+
     try {
-      const res = await fetch(`/api/subreddit/${encodeURIComponent(subreddit)}`);
+      const res = await fetch(`/api/subreddit/${encodeURIComponent(subreddit)}`, {
+        signal: controller.signal,
+        cache: "no-store",
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setPosts(data.posts ?? []);
       setFetchedAt(data.fetchedAt);
       setCached(data.cached);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load");
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setError("Community refresh timed out. Showing the last available posts.");
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to load");
+      }
     } finally {
+      window.clearTimeout(timeoutId);
       setLoading(false);
     }
-  }, [subreddit]);
+  }, [hasPosts, subreddit]);
 
-  useEffect(() => { fetchPosts(); }, [fetchPosts]);
+  useEffect(() => {
+    if (initialPosts === undefined) {
+      void fetchPosts();
+    }
+  }, [fetchPosts, initialPosts]);
 
-  if (loading) {
+  if (showBlockingLoading) {
     return (
       <div>
-        <div className="mb-4 pb-3 border-b border-zinc-800/60">
-          <div className="h-4 bg-zinc-800 rounded w-40 animate-pulse" />
+        <div className="mb-4 border-b border-zinc-800/60 pb-3">
+          <div className="h-4 w-40 animate-pulse rounded bg-zinc-800" />
         </div>
         <div className="space-y-2">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="bg-zinc-900 border border-zinc-800/70 rounded-lg px-4 py-3 animate-pulse">
-              <div className="h-3 bg-zinc-800 rounded w-3/4 mb-2" />
-              <div className="h-2 bg-zinc-800 rounded w-1/2" />
+            <div key={i} className="animate-pulse rounded-lg border border-zinc-800/70 bg-zinc-900 px-4 py-3">
+              <div className="mb-2 h-3 w-3/4 rounded bg-zinc-800" />
+              <div className="h-2 w-1/2 rounded bg-zinc-800" />
             </div>
           ))}
         </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 text-zinc-600">
-        <p className="text-sm text-zinc-400">{error}</p>
-        <button onClick={fetchPosts} className="mt-3 text-xs text-violet-400 hover:text-violet-300 underline">
-          Try again
-        </button>
       </div>
     );
   }
@@ -107,8 +126,41 @@ export function SubredditFeedContainer({ subreddit }: SubredditFeedContainerProp
           You’re viewing one community. Jump back to {returnDestination === "CurrentScout" ? "the full feed" : returnDestination.toLowerCase()} anytime.
         </p>
       </div>
-      <FilterBar totalPosts={posts.length} fetchedAt={fetchedAt} cached={cached} />
-      <PostList posts={posts} showRank />
+
+      {showRefreshError && (
+        <div className="mb-4 rounded-2xl border border-amber-500/20 bg-amber-500/8 px-4 py-3 text-sm text-amber-100">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span>{error}</span>
+            <button
+              onClick={fetchPosts}
+              className="self-start rounded-lg border border-amber-400/25 px-3 py-1 text-xs font-medium text-amber-100 transition-colors hover:border-amber-300/40 hover:bg-amber-400/10"
+            >
+              Retry refresh
+            </button>
+          </div>
+        </div>
+      )}
+
+      {error && !loading && !hasPosts ? (
+        <div className="flex flex-col items-center justify-center py-16 text-zinc-600">
+          <p className="text-sm text-zinc-400">{error}</p>
+          <button onClick={fetchPosts} className="mt-3 text-xs text-violet-400 underline hover:text-violet-300">
+            Try again
+          </button>
+        </div>
+      ) : !hasPosts ? (
+        <div className="flex flex-col items-center justify-center py-16 text-zinc-600">
+          <p className="text-sm text-zinc-400">No posts are available for this community right now.</p>
+          <button onClick={fetchPosts} className="mt-3 text-xs text-violet-400 underline hover:text-violet-300">
+            Refresh community
+          </button>
+        </div>
+      ) : (
+        <>
+          <FilterBar totalPosts={posts.length} fetchedAt={fetchedAt} cached={cached} />
+          <PostList posts={posts} showRank />
+        </>
+      )}
     </div>
   );
 }
