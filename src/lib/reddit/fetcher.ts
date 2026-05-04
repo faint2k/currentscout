@@ -12,7 +12,6 @@
 
 import { fetchMultipleSubreddits, fetchSubredditPosts } from "./client";
 import { fetchMultipleSubredditsRSS, fetchSubredditRSS } from "./rss";
-import { enrichWithThreadContext } from "./comments";
 import { rankPosts, rankPostsFallback } from "../ranking/scorer";
 import { cache } from "../cache/store";
 import { SUBREDDIT_NAMES } from "../utils/subreddits";
@@ -20,26 +19,9 @@ import { getMockPosts } from "../../data/mock";
 import type { RankedPost } from "./types";
 
 const CACHE_TTL_MS  = 20 * 60 * 1000; // 20 min — outlasts 15-min cron cycle
-const CACHE_VERSION = "v5";
+const CACHE_VERSION = "v6";
 const OVERVIEW_KEY  = (subs: string[]) => `overview:${CACHE_VERSION}:${[...subs].sort().join(",")}`;
 const SUB_KEY       = (name: string)   => `sub:${CACHE_VERSION}:${name.toLowerCase()}`;
-
-function shouldRepairCachedRssFeed(posts: RankedPost[]): boolean {
-  const topRss = posts.filter((post) => post.dataSource === "rss").slice(0, 8);
-  if (topRss.length < 4) return false;
-
-  const hasDiscussion = topRss.some(
-    (post) => (post.num_comments || 0) > 0 || Boolean(post.topComment),
-  );
-
-  return !hasDiscussion;
-}
-
-async function repairCachedRssFeed(posts: RankedPost[], limit = 12): Promise<RankedPost[]> {
-  const repaired = posts.map((post) => ({ ...post }));
-  await enrichWithThreadContext(repaired, limit);
-  return rankPostsFallback(repaired);
-}
 
 // ─── Overview feed ────────────────────────────────────────────────────────────
 
@@ -49,12 +31,6 @@ export async function fetchOverviewFeed(
   // 1. Redis hit (normal path — cron has pre-populated this)
   const hit = await cache.get<RankedPost[]>(OVERVIEW_KEY(subreddits));
   if (hit) {
-    if (shouldRepairCachedRssFeed(hit.value)) {
-      const repaired = await repairCachedRssFeed(hit.value, 12);
-      await cache.set(OVERVIEW_KEY(subreddits), repaired, CACHE_TTL_MS);
-      return { posts: repaired, cached: true, fetchedAt: hit.timestamp, sources: subreddits };
-    }
-
     return { posts: hit.value, cached: true, fetchedAt: hit.timestamp, sources: subreddits };
   }
 
@@ -115,11 +91,7 @@ export async function fetchOverviewFeed(
 
   // Cold-start: Reddit only — HN is fetched by the cron job, not here.
   // Fetching HN in a user-facing request would blow the function timeout.
-  let ranked = isRSS ? rankPostsFallback(raw) : rankPosts(raw);
-  if (isRSS) {
-    await enrichWithThreadContext(ranked, 12);
-    ranked = rankPostsFallback(ranked);
-  }
+  const ranked = isRSS ? rankPostsFallback(raw) : rankPosts(raw);
   await cache.set(OVERVIEW_KEY(subreddits), ranked, CACHE_TTL_MS);
 
   return { posts: ranked, cached: false, fetchedAt: Date.now(), sources: subreddits };
@@ -133,12 +105,6 @@ export async function fetchSubredditFeed(
   // 1. Redis hit
   const hit = await cache.get<RankedPost[]>(SUB_KEY(subreddit));
   if (hit) {
-    if (shouldRepairCachedRssFeed(hit.value)) {
-      const repaired = await repairCachedRssFeed(hit.value, 12);
-      await cache.set(SUB_KEY(subreddit), repaired, CACHE_TTL_MS);
-      return { posts: repaired, cached: true, fetchedAt: hit.timestamp };
-    }
-
     return { posts: hit.value, cached: true, fetchedAt: hit.timestamp };
   }
 
@@ -176,11 +142,7 @@ export async function fetchSubredditFeed(
 
   const isRSSSub = hot.source !== "json" && risingPosts.source !== "json" && top.source !== "json";
 
-  let ranked = isRSSSub ? rankPostsFallback(raw) : rankPosts(raw);
-  if (isRSSSub) {
-    await enrichWithThreadContext(ranked, 12);
-    ranked = rankPostsFallback(ranked);
-  }
+  const ranked = isRSSSub ? rankPostsFallback(raw) : rankPosts(raw);
 
   await cache.set(SUB_KEY(subreddit), ranked, CACHE_TTL_MS);
 
